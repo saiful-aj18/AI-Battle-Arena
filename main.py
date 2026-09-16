@@ -1,17 +1,19 @@
 import pygame
 import sys
 
+from ai.astar import a_star
 
-# =========================
+
+# =========================================================
 # INITIALIZATION
-# =========================
+# =========================================================
 
 pygame.init()
 
 
-# =========================
+# =========================================================
 # SCREEN SETTINGS
-# =========================
+# =========================================================
 
 SCREEN_WIDTH = 1200
 SCREEN_HEIGHT = 750
@@ -20,19 +22,24 @@ screen = pygame.display.set_mode(
     (SCREEN_WIDTH, SCREEN_HEIGHT)
 )
 
-pygame.display.set_caption("AI Battle Arena")
+pygame.display.set_caption(
+    "AI Battle Arena"
+)
 
 
-# =========================
+# =========================================================
 # COLORS
-# =========================
+# =========================================================
 
 BACKGROUND = (12, 18, 30)
+
 PANEL = (20, 28, 44)
 PANEL_LIGHT = (28, 38, 58)
 
 GRID_COLOR = (48, 62, 82)
-GRID_HIGHLIGHT = (60, 80, 105)
+
+OBSTACLE_COLOR = (55, 65, 82)
+OBSTACLE_BORDER = (85, 100, 120)
 
 TEXT = (235, 240, 248)
 TEXT_MUTED = (145, 158, 180)
@@ -48,9 +55,9 @@ YELLOW = (240, 190, 70)
 WHITE = (255, 255, 255)
 
 
-# =========================
-# FONT
-# =========================
+# =========================================================
+# FONTS
+# =========================================================
 
 FONT_SMALL = pygame.font.SysFont(
     "arial",
@@ -75,25 +82,22 @@ FONT_LARGE = pygame.font.SysFont(
 )
 
 
-# =========================
-# GAME AREA
-# =========================
+# =========================================================
+# GAME / GRID SETTINGS
+# =========================================================
 
 GAME_X = 30
-GAME_Y = 100
+GAME_Y = 90
 
 CELL_SIZE = 55
 
 ROWS = 8
 COLS = 12
 
-GRID_WIDTH = COLS * CELL_SIZE
-GRID_HEIGHT = ROWS * CELL_SIZE
 
-
-# =========================
-# UI PANEL POSITIONS
-# =========================
+# =========================================================
+# UI PANELS
+# =========================================================
 
 TOP_BAR = pygame.Rect(
     30,
@@ -131,18 +135,86 @@ BOTTOM_BAR = pygame.Rect(
 )
 
 
-# =========================
+# =========================================================
 # PLAYER / AI POSITION
-# =========================
+# =========================================================
 
-player_position = (2, 2)
+player_position = [2, 2]
 
-ai_position = (5, 9)
+ai_position = [5, 9]
+
+# =========================================================
+# A* PATH DATA
+# =========================================================
+
+ai_path = []
+
+ai_nodes_explored = 0
+
+ai_path_index = 0
 
 
-# =========================
+# =========================================================
+# OBSTACLES
+# =========================================================
+#
+# Format:
+# (row, column)
+#
+# These cells cannot be entered.
+#
+
+obstacles = {
+    (1, 4),
+    (1, 5),
+    (1, 6),
+
+    (2, 6),
+
+    (3, 3),
+    (3, 4),
+
+    (4, 7),
+    (4, 8),
+
+    (5, 4),
+
+    (6, 6),
+    (6, 7),
+}
+
+
+# =========================================================
+# GAME STATE
+# =========================================================
+
+PLAYER_TURN = "PLAYER"
+AI_TURN = "AI"
+
+current_turn = PLAYER_TURN
+
+round_number = 1
+
+ai_thinking = False
+
+ai_turn_start_time = 0
+
+
+# =========================================================
+# BATTLE LOG
+# =========================================================
+
+battle_logs = [
+    "Battle initialized.",
+    "Player deployed.",
+    "AI opponent deployed.",
+    "Your turn."
+]
+
+
+# =========================================================
 # HELPER FUNCTIONS
-# =========================
+# =========================================================
 
 def draw_text(
     text,
@@ -151,6 +223,7 @@ def draw_text(
     x,
     y
 ):
+
     surface = font.render(
         text,
         True,
@@ -169,6 +242,7 @@ def draw_centered_text(
     color,
     rect
 ):
+
     surface = font.render(
         text,
         True,
@@ -185,9 +259,19 @@ def draw_centered_text(
     )
 
 
-# =========================
-# TOP HEADER
-# =========================
+def add_log(message):
+
+    battle_logs.append(message)
+
+    # Keep only last 6 messages
+
+    if len(battle_logs) > 6:
+        battle_logs.pop(0)
+
+
+# =========================================================
+# HEADER
+# =========================================================
 
 def draw_header():
 
@@ -222,8 +306,6 @@ def draw_header():
         41
     )
 
-    # Round indicator
-
     round_rect = pygame.Rect(
         1010,
         32,
@@ -239,16 +321,16 @@ def draw_header():
     )
 
     draw_centered_text(
-        "ROUND 01",
+        f"ROUND {round_number:02}",
         FONT_SMALL,
         CYAN,
         round_rect
     )
 
 
-# =========================
+# =========================================================
 # HEALTH BAR
-# =========================
+# =========================================================
 
 def draw_health_bar(
     x,
@@ -295,13 +377,15 @@ def draw_health_bar(
     )
 
 
-# =========================
-# PLAYER / AI INFO
-# =========================
+# =========================================================
+# CHARACTER INFORMATION
+# =========================================================
 
 def draw_character_info():
 
+    # -------------------------
     # PLAYER
+    # -------------------------
 
     draw_text(
         "PLAYER",
@@ -338,7 +422,9 @@ def draw_character_info():
     )
 
 
+    # -------------------------
     # AI
+    # -------------------------
 
     draw_text(
         "AI OPPONENT",
@@ -375,50 +461,16 @@ def draw_character_info():
     )
 
 
-# =========================
-# GRID
-# =========================
-
-def draw_grid():
-
-    grid_x = GAME_X + 20
-    grid_y = GAME_Y + 110
-
-    for row in range(ROWS):
-
-        for col in range(COLS):
-
-            rect = pygame.Rect(
-                grid_x + col * CELL_SIZE,
-                grid_y + row * CELL_SIZE,
-                CELL_SIZE,
-                CELL_SIZE
-            )
-
-            pygame.draw.rect(
-                screen,
-                (24, 33, 50),
-                rect
-            )
-
-            pygame.draw.rect(
-                screen,
-                GRID_COLOR,
-                rect,
-                1
-            )
-
-
-# =========================
-# GRID COORDINATE HELPER
-# =========================
+# =========================================================
+# GRID POSITION → SCREEN POSITION
+# =========================================================
 
 def grid_to_pixel(position):
 
     row, col = position
 
     grid_x = GAME_X + 20
-    grid_y = GAME_Y + 110
+    grid_y = GAME_Y + 130
 
     x = (
         grid_x
@@ -435,9 +487,112 @@ def grid_to_pixel(position):
     return x, y
 
 
-# =========================
+# =========================================================
+# GRID
+# =========================================================
+
+def draw_grid():
+
+    grid_x = GAME_X + 20
+    grid_y = GAME_Y + 130
+
+    for row in range(ROWS):
+
+        for col in range(COLS):
+
+            rect = pygame.Rect(
+                grid_x + col * CELL_SIZE,
+                grid_y + row * CELL_SIZE,
+                CELL_SIZE,
+                CELL_SIZE
+            )
+
+            # Normal cell
+
+            pygame.draw.rect(
+                screen,
+                (24, 33, 50),
+                rect
+            )
+
+            # Grid border
+
+            pygame.draw.rect(
+                screen,
+                GRID_COLOR,
+                rect,
+                1
+            )
+            
+            # =====================================================
+            # A* PATH VISUALIZATION
+            # =====================================================
+            if (
+                (row, col) in ai_path
+                and (row, col) != tuple(ai_position)
+                and (row, col) != tuple(player_position)
+                ):
+                
+                path_surface = pygame.Surface(
+                    (CELL_SIZE, CELL_SIZE),
+                    pygame.SRCALPHA
+                    )
+                path_surface.fill(
+                    (45, 200, 230, 70)
+                    )
+                screen.blit(
+                    path_surface,
+                    rect
+                    )
+
+            # -------------------------
+            # OBSTACLE
+            # -------------------------
+
+            if (row, col) in obstacles:
+
+                obstacle_rect = rect.inflate(
+                    -8,
+                    -8
+                )
+
+                pygame.draw.rect(
+                    screen,
+                    OBSTACLE_COLOR,
+                    obstacle_rect,
+                    border_radius=7
+                )
+
+                pygame.draw.rect(
+                    screen,
+                    OBSTACLE_BORDER,
+                    obstacle_rect,
+                    2,
+                    border_radius=7
+                )
+
+                # X pattern
+
+                pygame.draw.line(
+                    screen,
+                    (95, 105, 120),
+                    obstacle_rect.topleft,
+                    obstacle_rect.bottomright,
+                    2
+                )
+
+                pygame.draw.line(
+                    screen,
+                    (95, 105, 120),
+                    obstacle_rect.topright,
+                    obstacle_rect.bottomleft,
+                    2
+                )
+
+
+# =========================================================
 # PLAYER
-# =========================
+# =========================================================
 
 def draw_player():
 
@@ -454,7 +609,7 @@ def draw_player():
         25
     )
 
-    # Character
+    # Body
 
     pygame.draw.circle(
         screen,
@@ -463,7 +618,7 @@ def draw_player():
         17
     )
 
-    # Head highlight
+    # Highlight
 
     pygame.draw.circle(
         screen,
@@ -473,9 +628,9 @@ def draw_player():
     )
 
 
-# =========================
+# =========================================================
 # AI
-# =========================
+# =========================================================
 
 def draw_ai():
 
@@ -492,7 +647,7 @@ def draw_ai():
         25
     )
 
-    # Character
+    # Body
 
     pygame.draw.circle(
         screen,
@@ -501,7 +656,7 @@ def draw_ai():
         17
     )
 
-    # AI eyes
+    # Eyes
 
     pygame.draw.circle(
         screen,
@@ -518,9 +673,9 @@ def draw_ai():
     )
 
 
-# =========================
+# =========================================================
 # BATTLEFIELD
-# =========================
+# =========================================================
 
 def draw_battlefield():
 
@@ -548,9 +703,9 @@ def draw_battlefield():
     draw_ai()
 
 
-# =========================
+# =========================================================
 # AI BRAIN PANEL
-# =========================
+# =========================================================
 
 def draw_ai_panel():
 
@@ -596,14 +751,14 @@ def draw_ai_panel():
     )
 
     draw_text(
-        "A* + Minimax",
+        "A* Search",
         FONT_NORMAL,
         TEXT,
         835,
         202
     )
 
-    # Depth
+    # Search Depth
 
     draw_text(
         "Search Depth",
@@ -621,7 +776,7 @@ def draw_ai_panel():
         262
     )
 
-    # Action
+    # Current Action
 
     draw_text(
         "Current Action",
@@ -631,10 +786,20 @@ def draw_ai_panel():
         180
     )
 
+    if current_turn == PLAYER_TURN:
+
+        action_text = "WAITING"
+        action_color = YELLOW
+
+    else:
+
+        action_text = "THINKING"
+        action_color = CYAN
+
     draw_text(
-        "WAITING",
+        action_text,
         FONT_NORMAL,
-        YELLOW,
+        action_color,
         980,
         202
     )
@@ -648,14 +813,19 @@ def draw_ai_panel():
         980,
         240
     )
-
+    
     draw_text(
-        "0",
+        str(ai_nodes_explored),
         FONT_NORMAL,
         TEXT,
         980,
         262
     )
+    
+    
+    
+
+    
 
     # Status
 
@@ -673,17 +843,28 @@ def draw_ai_panel():
         border_radius=7
     )
 
-    draw_centered_text(
-        "AI READY",
-        FONT_SMALL,
-        GREEN,
-        status_rect
-    )
+    if current_turn == PLAYER_TURN:
+
+        draw_centered_text(
+            "YOUR TURN",
+            FONT_SMALL,
+            GREEN,
+            status_rect
+        )
+
+    else:
+
+        draw_centered_text(
+            "AI TURN",
+            FONT_SMALL,
+            CYAN,
+            status_rect
+        )
 
 
-# =========================
+# =========================================================
 # BATTLE LOG
-# =========================
+# =========================================================
 
 def draw_battle_log():
 
@@ -710,16 +891,9 @@ def draw_battle_log():
         400
     )
 
-    logs = [
-        "Battle initialized.",
-        "Player deployed.",
-        "AI opponent deployed.",
-        "Waiting for player..."
-    ]
-
     y = 445
 
-    for log in logs:
+    for log in battle_logs:
 
         draw_text(
             "> " + log,
@@ -732,9 +906,9 @@ def draw_battle_log():
         y += 35
 
 
-# =========================
+# =========================================================
 # BOTTOM CONTROLS
-# =========================
+# =========================================================
 
 def draw_bottom_bar():
 
@@ -745,13 +919,25 @@ def draw_bottom_bar():
         border_radius=10
     )
 
-    draw_text(
-        "YOUR TURN",
-        FONT_NORMAL,
-        PLAYER_COLOR,
-        50,
-        695
-    )
+    if current_turn == PLAYER_TURN:
+
+        draw_text(
+            "YOUR TURN",
+            FONT_NORMAL,
+            PLAYER_COLOR,
+            50,
+            695
+        )
+
+    else:
+
+        draw_text(
+            "AI TURN",
+            FONT_NORMAL,
+            AI_COLOR,
+            50,
+            695
+        )
 
     draw_text(
         "WASD / ARROWS  Move",
@@ -786,19 +972,346 @@ def draw_bottom_bar():
     )
 
 
-# =========================
-# MAIN GAME LOOP
-# =========================
+# =========================================================
+# VALID POSITION CHECK
+# =========================================================
+
+def is_valid_position(
+    position
+):
+
+    row, col = position
+
+    # Outside grid
+
+    if row < 0 or row >= ROWS:
+        return False
+
+    if col < 0 or col >= COLS:
+        return False
+
+    # Obstacle
+
+    if (row, col) in obstacles:
+        return False
+
+    # Player cannot move into AI
+
+    if position == tuple(ai_position):
+        return False
+
+    # AI cannot move into Player
+
+    if position == tuple(player_position):
+        return False
+
+    return True
+
+
+# =========================================================
+# PLAYER MOVEMENT
+# =========================================================
+
+def move_player(
+    row_change,
+    col_change
+):
+
+    global current_turn
+    global ai_thinking
+    global ai_turn_start_time
+
+    new_row = (
+        player_position[0]
+        + row_change
+    )
+
+    new_col = (
+        player_position[1]
+        + col_change
+    )
+
+    new_position = (
+        new_row,
+        new_col
+    )
+
+    # Check movement
+
+    if not is_valid_position(
+        new_position
+    ):
+
+        add_log(
+            "Movement blocked."
+        )
+
+        return
+
+    # Update position
+
+    player_position[0] = new_row
+    player_position[1] = new_col
+
+    add_log(
+        f"Player moved → ({new_row}, {new_col})"
+    )
+    
+    calculate_ai_path()
+
+    # Player turn finished
+
+    current_turn = AI_TURN
+
+    ai_thinking = True
+
+    ai_turn_start_time = pygame.time.get_ticks()
+
+    add_log(
+        "AI is thinking..."
+    )
+
+
+# =========================================================
+# TEMPORARY AI MOVEMENT
+# =========================================================
+#
+# IMPORTANT:
+# This is NOT A*.
+#
+# We are using a simple one-step movement only to
+# demonstrate the turn system.
+#
+# Step 3 will replace this with REAL A*.
+#
+
+
+# =========================================================
+# CALCULATE AI PATH USING A*
+# =========================================================
+
+def calculate_ai_path():
+    
+    global ai_path
+    global ai_nodes_explored
+    global ai_path_index
+
+    start = tuple(ai_position)
+
+    player = tuple(player_position)
+
+    # Possible cells around player
+
+    target_cells = []
+
+    directions = [
+        (-1, 0),
+        (1, 0),
+        (0, -1),
+        (0, 1)
+    ]
+
+    for row_change, col_change in directions:
+
+        target = (
+            player[0] + row_change,
+            player[1] + col_change
+        )
+
+        # Inside grid
+
+        if target[0] < 0 or target[0] >= ROWS:
+            continue
+
+        if target[1] < 0 or target[1] >= COLS:
+            continue
+
+        # Not obstacle
+
+        if target in obstacles:
+            continue
+
+        target_cells.append(target)
+
+    # Find shortest valid path
+
+    best_path = []
+    best_nodes = 0
+
+    for target in target_cells:
+
+        path, nodes = a_star(
+            start,
+            target,
+            ROWS,
+            COLS,
+            obstacles
+        )
+
+        if path:
+
+            if (
+                not best_path
+                or len(path) < len(best_path)
+            ):
+
+                best_path = path
+                best_nodes = nodes
+
+    ai_path = best_path
+
+    ai_nodes_explored = best_nodes
+
+    ai_path_index = 0
+
+    if ai_path:
+
+        add_log(
+            f"A* path found → {len(ai_path) - 1} moves"
+        )
+
+        add_log(
+            f"Nodes explored → {ai_nodes_explored}"
+        )
+
+    else:
+
+        add_log(
+            "A* could not find a path."
+        )
+
+# =========================================================
+# MOVE AI ALONG A* PATH
+# =========================================================
+
+def ai_move():
+
+    global current_turn
+    global round_number
+    global ai_thinking
+    global ai_path_index
+
+    # No path
+
+    if not ai_path:
+
+        calculate_ai_path()
+
+    # If path exists
+
+    if len(ai_path) > 1:
+
+        # First cell is current AI position
+        #
+        # So move to next cell
+
+        next_position = ai_path[1]
+
+        ai_position[0] = next_position[0]
+
+        ai_position[1] = next_position[1]
+
+        # Remove first cell from path
+
+        ai_path_index += 1
+
+        add_log(
+            f"AI follows A* → ({next_position[0]}, {next_position[1]})"
+        )
+
+    else:
+
+        add_log(
+            "AI is already near target."
+        )
+
+    # AI turn finished
+
+    current_turn = PLAYER_TURN
+
+    ai_thinking = False
+
+    round_number += 1
+
+    add_log(
+        "Your turn."
+    )
+
+# =========================================================
+# HANDLE PLAYER KEYBOARD
+# =========================================================
+
+def handle_player_input(
+    key
+):
+
+    if current_turn != PLAYER_TURN:
+
+        return
+
+    # UP
+
+    if key in (
+        pygame.K_w,
+        pygame.K_UP
+    ):
+
+        move_player(
+            -1,
+            0
+        )
+
+    # DOWN
+
+    elif key in (
+        pygame.K_s,
+        pygame.K_DOWN
+    ):
+
+        move_player(
+            1,
+            0
+        )
+
+    # LEFT
+
+    elif key in (
+        pygame.K_a,
+        pygame.K_LEFT
+    ):
+
+        move_player(
+            0,
+            -1
+        )
+
+    # RIGHT
+
+    elif key in (
+        pygame.K_d,
+        pygame.K_RIGHT
+    ):
+
+        move_player(
+            0,
+            1
+        )
+
+
+# =========================================================
+# MAIN LOOP
+# =========================================================
 
 clock = pygame.time.Clock()
 
 running = True
 
+
 while running:
 
-    # =====================
+    # =====================================================
     # EVENTS
-    # =====================
+    # =====================================================
 
     for event in pygame.event.get():
 
@@ -808,14 +1321,46 @@ while running:
 
         if event.type == pygame.KEYDOWN:
 
+            # Quit
+
             if event.key == pygame.K_ESCAPE:
 
                 running = False
 
+            # Player controls
 
-    # =====================
+            if current_turn == PLAYER_TURN:
+
+                handle_player_input(
+                    event.key
+                )
+
+
+    # =====================================================
+    # AI TURN
+    # =====================================================
+
+    if (
+        current_turn == AI_TURN
+        and ai_thinking
+    ):
+
+        current_time = pygame.time.get_ticks()
+
+        # Wait 700 milliseconds
+
+        if (
+            current_time
+            - ai_turn_start_time
+            > 700
+        ):
+
+            ai_move()
+
+
+    # =====================================================
     # DRAW
-    # =====================
+    # =====================================================
 
     screen.fill(
         BACKGROUND
@@ -832,14 +1377,18 @@ while running:
     draw_bottom_bar()
 
 
-    # =====================
-    # UPDATE SCREEN
-    # =====================
+    # =====================================================
+    # UPDATE
+    # =====================================================
 
     pygame.display.flip()
 
     clock.tick(60)
 
+
+# =========================================================
+# EXIT
+# =========================================================
 
 pygame.quit()
 

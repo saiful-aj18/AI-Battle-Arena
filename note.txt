@@ -1,0 +1,29 @@
+AI-Battle-Arena/
+│
+├── main.py
+│
+├── settings.py
+│
+├── game/
+│   ├── game.py
+│   ├── state.py
+│   └── turn_manager.py
+│
+├── entities/
+│   ├── player.py
+│   └── ai_player.py
+│
+├── ai/
+│   ├── astar.py
+│   ├── minimax.py
+│   └── evaluation.py
+│
+├── ui/
+│   ├── hud.py
+│   ├── health_bar.py
+│   ├── battle_log.py
+│   └── ai_panel.py
+│
+└── effects/
+    ├── attack_effect.py
+    └── damage_effect.py

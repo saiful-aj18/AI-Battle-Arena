@@ -1,11 +1,9 @@
 import pygame
 import sys
+import time
 
 from ai.astar import a_star
-
-from ai.minimax import (
-    get_best_action
-)
+from ai.minimax import get_best_action
 
 
 # =========================================================
@@ -14,59 +12,44 @@ from ai.minimax import (
 
 pygame.init()
 
+WIDTH = 1200
+HEIGHT = 750
 
-# =========================================================
-# SCREEN
-# =========================================================
-
-SCREEN_WIDTH = 1200
-SCREEN_HEIGHT = 750
-
-screen = pygame.display.set_mode(
-    (
-        SCREEN_WIDTH,
-        SCREEN_HEIGHT
-    )
+SCREEN = pygame.display.set_mode(
+    (WIDTH, HEIGHT)
 )
 
 pygame.display.set_caption(
-    "AI Battle Arena"
+    "AI Battle Arena - A* + Minimax"
 )
+
+CLOCK = pygame.time.Clock()
 
 
 # =========================================================
 # COLORS
 # =========================================================
 
-BACKGROUND = (12, 18, 30)
+BG_COLOR = (10, 15, 25)
+PANEL_COLOR = (18, 25, 38)
+PANEL_LIGHT = (25, 34, 50)
 
-PANEL = (20, 28, 44)
+GRID_COLOR = (45, 58, 78)
+GRID_ACTIVE = (55, 75, 100)
 
-PANEL_LIGHT = (28, 38, 58)
+WHITE = (240, 245, 250)
+GRAY = (150, 160, 175)
 
-GRID_COLOR = (48, 62, 82)
+CYAN = (40, 220, 240)
+GREEN = (70, 220, 130)
+RED = (245, 80, 90)
+YELLOW = (255, 205, 70)
+ORANGE = (255, 145, 60)
 
-OBSTACLE_COLOR = (55, 65, 82)
+BLUE = (70, 130, 255)
+PURPLE = (170, 100, 240)
 
-OBSTACLE_BORDER = (85, 100, 120)
-
-TEXT = (235, 240, 248)
-
-TEXT_MUTED = (145, 158, 180)
-
-PLAYER_COLOR = (40, 210, 170)
-
-AI_COLOR = (230, 80, 90)
-
-CYAN = (45, 200, 230)
-
-GREEN = (60, 210, 130)
-
-RED = (230, 75, 85)
-
-YELLOW = (240, 190, 70)
-
-WHITE = (255, 255, 255)
+BLACK = (5, 8, 15)
 
 
 # =========================================================
@@ -75,166 +58,107 @@ WHITE = (255, 255, 255)
 
 FONT_SMALL = pygame.font.SysFont(
     "arial",
-    16
+    14
 )
 
 FONT_NORMAL = pygame.font.SysFont(
     "arial",
-    20
+    17
 )
 
 FONT_MEDIUM = pygame.font.SysFont(
     "arial",
-    24,
+    20,
     bold=True
 )
 
 FONT_LARGE = pygame.font.SysFont(
     "arial",
+    28,
+    bold=True
+)
+
+FONT_TITLE = pygame.font.SysFont(
+    "arial",
     30,
     bold=True
 )
 
-FONT_HUGE = pygame.font.SysFont(
-    "arial",
-    48,
-    bold=True
-)
-
 
 # =========================================================
-# GRID
+# GRID SETTINGS
 # =========================================================
 
-GAME_X = 30
-
-GAME_Y = 90
+ROWS = 8
+COLS = 12
 
 CELL_SIZE = 55
 
-ROWS = 8
+GRID_X = 45
+GRID_Y = 130
 
-COLS = 12
-
-
-# =========================================================
-# PANELS
-# =========================================================
-
-TOP_BAR = pygame.Rect(
-    30,
-    20,
-    1140,
-    60
-)
-
-BATTLEFIELD_PANEL = pygame.Rect(
-    30,
-    90,
-    760,
-    570
-)
-
-AI_PANEL = pygame.Rect(
-    810,
-    90,
-    360,
-    270
-)
-
-BATTLE_LOG_PANEL = pygame.Rect(
-    810,
-    380,
-    360,
-    280
-)
-
-BOTTOM_BAR = pygame.Rect(
-    30,
-    680,
-    1140,
-    50
-)
+GRID_WIDTH = COLS * CELL_SIZE
+GRID_HEIGHT = ROWS * CELL_SIZE
 
 
 # =========================================================
-# POSITIONS
+# GAME SETTINGS
 # =========================================================
 
-player_position = [2, 2]
+MAX_HP = 100
 
-ai_position = [5, 9]
+PLAYER_DAMAGE = 20
+AI_DAMAGE = 15
+
+ATTACK_RANGE = 1
+
+AI_DEPTH = 3
+
+AI_THINK_DELAY = 700
 
 
 # =========================================================
 # OBSTACLES
 # =========================================================
 
-obstacles = {
-
+OBSTACLES = {
     (1, 4),
     (1, 5),
-    (1, 6),
 
-    (2, 6),
+    (2, 4),
 
-    (3, 3),
-    (3, 4),
+    (3, 7),
+    (3, 8),
 
-    (4, 7),
-    (4, 8),
+    (4, 2),
+    (4, 3),
 
-    (5, 4),
+    (5, 7),
 
+    (6, 5),
     (6, 6),
-    (6, 7),
+    (6, 8),
+
+    (7, 8),
+    (7, 9),
+    
 }
-
-
-# =========================================================
-# HP
-# =========================================================
-
-PLAYER_MAX_HP = 100
-
-AI_MAX_HP = 100
-
-player_hp = 100
-
-ai_hp = 100
-
-
-# =========================================================
-# COMBAT
-# =========================================================
-
-PLAYER_DAMAGE = 20
-
-AI_DAMAGE = 15
-
-ATTACK_RANGE = 1
-
-player_defending = False
-
-ai_defending = False
-
-
-# =========================================================
-# TURN
-# =========================================================
-
-PLAYER_TURN = "PLAYER"
-
-AI_TURN = "AI"
-
-current_turn = PLAYER_TURN
-
-round_number = 1
 
 
 # =========================================================
 # GAME STATE
 # =========================================================
+
+player_position = (2, 2)
+ai_position = (5, 9)
+
+player_hp = MAX_HP
+ai_hp = MAX_HP
+
+player_defending = False
+ai_defending = False
+
+turn = "PLAYER"
 
 game_over = False
 
@@ -242,243 +166,332 @@ winner = None
 
 ai_thinking = False
 
-ai_turn_start = 0
+ai_action_text = "Waiting..."
+
+battle_log = []
 
 
 # =========================================================
-# AI INFORMATION
+# AI METRICS
 # =========================================================
 
-ai_path = []
+astar_path = []
 
-ai_nodes_explored = 0
+astar_nodes = 0
+astar_path_cost = 0
+astar_time = 0.0
 
 minimax_nodes = 0
+minimax_pruned = 0
+minimax_time = 0.0
 
 minimax_score = 0
 
-ai_current_action = "WAITING"
-
-SEARCH_DEPTH = 3
+search_depth = AI_DEPTH
 
 
 # =========================================================
-# EFFECTS
+# ANIMATION STATE
 # =========================================================
 
-attack_effect = None
+attack_animation = False
+attack_animation_start = 0
 
-damage_effects = []
+attack_from = None
+attack_to = None
 
+damage_number = None
+damage_number_start = 0
+damage_number_position = None
 
-# =========================================================
-# LOG
-# =========================================================
+shield_animation = False
+shield_animation_start = 0
 
-battle_logs = [
-
-    "Battle initialized.",
-
-    "Player deployed.",
-
-    "AI opponent deployed.",
-
-    "Your turn."
-]
+MOVE_ANIMATION_TIME = 180
 
 
 # =========================================================
-# TEXT
-# =========================================================
-
-def draw_text(
-    text,
-    font,
-    color,
-    x,
-    y
-):
-
-    surface = font.render(
-        text,
-        True,
-        color
-    )
-
-    screen.blit(
-        surface,
-        (
-            x,
-            y
-        )
-    )
-
-
-def centered_text(
-    text,
-    font,
-    color,
-    rect
-):
-
-    surface = font.render(
-        text,
-        True,
-        color
-    )
-
-    text_rect = surface.get_rect(
-        center=rect.center
-    )
-
-    screen.blit(
-        surface,
-        text_rect
-    )
-
-
-# =========================================================
-# LOG
+# HELPER FUNCTIONS
 # =========================================================
 
 def add_log(message):
 
-    battle_logs.append(
-        message
-    )
+    battle_log.append(message)
 
-    if len(battle_logs) > 6:
+    if len(battle_log) > 8:
+        battle_log.pop(0)
 
-        battle_logs.pop(0)
+
+def reset_metrics():
+
+    global astar_path
+    global astar_nodes
+    global astar_path_cost
+    global astar_time
+
+    global minimax_nodes
+    global minimax_pruned
+    global minimax_time
+    global minimax_score
+
+    astar_path = []
+
+    astar_nodes = 0
+    astar_path_cost = 0
+    astar_time = 0.0
+
+    minimax_nodes = 0
+    minimax_pruned = 0
+    minimax_time = 0.0
+    minimax_score = 0
+
+
+def reset_game():
+
+    global player_position
+    global ai_position
+
+    global player_hp
+    global ai_hp
+
+    global player_defending
+    global ai_defending
+
+    global turn
+    global game_over
+    global winner
+
+    global ai_thinking
+    global ai_action_text
+
+    global battle_log
+
+    global attack_animation
+    global damage_number
+    global shield_animation
+
+    player_position = (2, 2)
+    ai_position = (5, 9)
+
+    player_hp = MAX_HP
+    ai_hp = MAX_HP
+
+    player_defending = False
+    ai_defending = False
+
+    turn = "PLAYER"
+
+    game_over = False
+    winner = None
+
+    ai_thinking = False
+
+    ai_action_text = "Waiting..."
+
+    battle_log = []
+
+    attack_animation = False
+    damage_number = None
+    shield_animation = False
+
+    reset_metrics()
+
+    add_log("Battle started.")
+    add_log("Your turn. Choose an action.")
 
 
 # =========================================================
-# GRID → PIXEL
+# GRID HELPERS
 # =========================================================
 
-def grid_to_pixel(position):
+def cell_rect(position):
 
     row, col = position
 
-    grid_x = GAME_X + 20
+    return pygame.Rect(
+        GRID_X + col * CELL_SIZE,
+        GRID_Y + row * CELL_SIZE,
+        CELL_SIZE,
+        CELL_SIZE
+    )
 
-    grid_y = GAME_Y + 130
+
+def cell_center(position):
+
+    rect = cell_rect(position)
+
+    return rect.center
+
+
+def is_inside_grid(position):
+
+    row, col = position
 
     return (
-
-        grid_x
-        +
-        col * CELL_SIZE
-        +
-        CELL_SIZE // 2,
-
-        grid_y
-        +
-        row * CELL_SIZE
-        +
-        CELL_SIZE // 2
+        0 <= row < ROWS
+        and
+        0 <= col < COLS
     )
+
+
+def get_adjacent_positions(position):
+
+    row, col = position
+
+    directions = [
+        (-1, 0),
+        (1, 0),
+        (0, -1),
+        (0, 1),
+    ]
+
+    positions = []
+
+    for dr, dc in directions:
+
+        new_position = (
+            row + dr,
+            col + dc
+        )
+
+        if is_inside_grid(new_position):
+            positions.append(new_position)
+
+    return positions
 
 
 # =========================================================
 # DISTANCE
 # =========================================================
 
-def get_distance(
-    first,
-    second
-):
+def get_distance(a, b):
 
     return (
-
-        abs(
-            first[0]
-            -
-            second[0]
-        )
-
+        abs(a[0] - b[0])
         +
+        abs(a[1] - b[1])
+    )
 
-        abs(
-            first[1]
-            -
-            second[1]
+
+def can_attack(attacker, target):
+
+    return (
+        get_distance(
+            attacker,
+            target
         )
+        <= ATTACK_RANGE
     )
 
 
 # =========================================================
-# HEADER
+# DRAW TEXT
 # =========================================================
 
-def draw_header():
+def draw_text(
+    text,
+    position,
+    font=FONT_NORMAL,
+    color=WHITE
+):
+
+    surface = font.render(
+        str(text),
+        True,
+        color
+    )
+
+    SCREEN.blit(
+        surface,
+        position
+    )
+
+
+# =========================================================
+# DRAW CENTERED TEXT
+# =========================================================
+
+def draw_center_text(
+    text,
+    center,
+    font=FONT_NORMAL,
+    color=WHITE
+):
+
+    surface = font.render(
+        str(text),
+        True,
+        color
+    )
+
+    rect = surface.get_rect(
+        center=center
+    )
+
+    SCREEN.blit(
+        surface,
+        rect
+    )
+
+
+# =========================================================
+# DRAW PANEL
+# =========================================================
+
+def draw_panel(
+    rect,
+    title=None
+):
 
     pygame.draw.rect(
-        screen,
-        PANEL,
-        TOP_BAR,
+        SCREEN,
+        PANEL_COLOR,
+        rect,
         border_radius=12
     )
 
     pygame.draw.rect(
-        screen,
-        (35, 48, 70),
-        TOP_BAR,
-        1,
+        SCREEN,
+        (40, 52, 70),
+        rect,
+        width=1,
         border_radius=12
     )
 
-    draw_text(
-        "AI BATTLE ARENA",
-        FONT_LARGE,
-        TEXT,
-        50,
-        34
-    )
+    if title:
 
-    draw_text(
-        "TURN-BASED STRATEGIC COMBAT",
-        FONT_SMALL,
-        TEXT_MUTED,
-        305,
-        41
-    )
-
-    round_rect = pygame.Rect(
-        1010,
-        32,
-        130,
-        35
-    )
-
-    pygame.draw.rect(
-        screen,
-        PANEL_LIGHT,
-        round_rect,
-        border_radius=8
-    )
-
-    centered_text(
-        f"ROUND {round_number:02}",
-        FONT_SMALL,
-        CYAN,
-        round_rect
-    )
+        draw_text(
+            title,
+            (
+                rect.x + 16,
+                rect.y + 12
+            ),
+            FONT_MEDIUM,
+            WHITE
+        )
 
 
 # =========================================================
-# HEALTH BAR
+# HP BAR
 # =========================================================
 
-def draw_health_bar(
+def draw_hp_bar(
     x,
     y,
     width,
     height,
     hp,
     max_hp,
-    color
+    label,
+    bar_color
 ):
+
+    draw_text(
+        f"{label}: {hp}/{max_hp}",
+        (x, y - 24),
+        FONT_NORMAL,
+        WHITE
+    )
 
     background = pygame.Rect(
         x,
@@ -488,752 +501,494 @@ def draw_health_bar(
     )
 
     pygame.draw.rect(
-        screen,
-        (45, 50, 65),
+        SCREEN,
+        (45, 50, 60),
         background,
-        border_radius=5
+        border_radius=6
     )
 
-    ratio = hp / max_hp
-
-    hp_width = int(
-        width * ratio
-    )
-
-    if hp_width > 0:
-
-        hp_rect = pygame.Rect(
-            x,
-            y,
-            hp_width,
-            height
+    ratio = max(
+        0,
+        min(
+            hp / max_hp,
+            1
         )
-
-        pygame.draw.rect(
-            screen,
-            color,
-            hp_rect,
-            border_radius=5
-        )
-
-
-# =========================================================
-# CHARACTER INFO
-# =========================================================
-
-def draw_character_info():
-
-    draw_text(
-        "PLAYER",
-        FONT_MEDIUM,
-        PLAYER_COLOR,
-        50,
-        105
     )
 
-    draw_text(
-        "Saiful",
-        FONT_SMALL,
-        TEXT_MUTED,
-        50,
-        135
+    foreground = pygame.Rect(
+        x,
+        y,
+        int(width * ratio),
+        height
     )
 
-    draw_health_bar(
-        50,
-        158,
-        250,
-        18,
-        player_hp,
-        PLAYER_MAX_HP,
-        PLAYER_COLOR
+    pygame.draw.rect(
+        SCREEN,
+        bar_color,
+        foreground,
+        border_radius=6
     )
 
-    draw_text(
-        f"{player_hp} / {PLAYER_MAX_HP} HP",
-        FONT_SMALL,
-        TEXT,
-        310,
-        158
-    )
-
-
-    draw_text(
-        "AI OPPONENT",
-        FONT_MEDIUM,
-        AI_COLOR,
-        430,
-        105
-    )
-
-    draw_text(
-        "AI Warrior",
-        FONT_SMALL,
-        TEXT_MUTED,
-        430,
-        135
-    )
-
-    draw_health_bar(
-        430,
-        158,
-        250,
-        18,
-        ai_hp,
-        AI_MAX_HP,
-        AI_COLOR
-    )
-
-    draw_text(
-        f"{ai_hp} / {AI_MAX_HP} HP",
-        FONT_SMALL,
-        TEXT,
-        690,
-        158
+    pygame.draw.rect(
+        SCREEN,
+        (80, 90, 105),
+        background,
+        width=1,
+        border_radius=6
     )
 
 
 # =========================================================
-# GRID
+# DRAW GRID
 # =========================================================
 
 def draw_grid():
-
-    grid_x = GAME_X + 20
-
-    grid_y = GAME_Y + 130
 
     for row in range(ROWS):
 
         for col in range(COLS):
 
-            rect = pygame.Rect(
-
-                grid_x
-                +
-                col * CELL_SIZE,
-
-                grid_y
-                +
-                row * CELL_SIZE,
-
-                CELL_SIZE,
-
-                CELL_SIZE
-            )
-
-            pygame.draw.rect(
-                screen,
-                (24, 33, 50),
-                rect
-            )
-
-            # =================================================
-            # A* PATH
-            # =================================================
-
-            if (
-                (row, col) in ai_path
-
-                and
-                (row, col)
-                not in obstacles
-
-                and
-                (row, col)
-                != tuple(ai_position)
-
-                and
-                (row, col)
-                != tuple(player_position)
-            ):
-
-                overlay = pygame.Surface(
-                    (
-                        CELL_SIZE,
-                        CELL_SIZE
-                    ),
-                    pygame.SRCALPHA
-                )
-
-                overlay.fill(
-                    (45, 200, 230, 70)
-                )
-
-                screen.blit(
-                    overlay,
-                    rect
-                )
-
-            # =================================================
-            # GRID BORDER
-            # =================================================
-
-            pygame.draw.rect(
-                screen,
-                GRID_COLOR,
-                rect,
-                1
-            )
-
-            # =================================================
-            # OBSTACLE
-            # =================================================
-
-            if (
+            position = (
                 row,
                 col
-            ) in obstacles:
+            )
 
-                obstacle = rect.inflate(
-                    -8,
-                    -8
+            rect = cell_rect(
+                position
+            )
+
+            if position in OBSTACLES:
+
+                pygame.draw.rect(
+                    SCREEN,
+                    (35, 40, 52),
+                    rect,
+                    border_radius=5
                 )
 
                 pygame.draw.rect(
-                    screen,
-                    OBSTACLE_COLOR,
-                    obstacle,
-                    border_radius=7
+                    SCREEN,
+                    (70, 78, 95),
+                    rect,
+                    width=2,
+                    border_radius=5
+                )
+
+                draw_center_text(
+                    "■",
+                    rect.center,
+                    FONT_NORMAL,
+                    (90, 100, 115)
+                )
+
+            else:
+
+                pygame.draw.rect(
+                    SCREEN,
+                    (20, 28, 42),
+                    rect,
+                    border_radius=3
                 )
 
                 pygame.draw.rect(
-                    screen,
-                    OBSTACLE_BORDER,
-                    obstacle,
-                    2,
-                    border_radius=7
+                    SCREEN,
+                    GRID_COLOR,
+                    rect,
+                    width=1
                 )
 
 
 # =========================================================
-# PLAYER
+# DRAW A* PATH
+# =========================================================
+
+def draw_astar_path():
+
+    if not astar_path:
+        return
+
+    for index, position in enumerate(astar_path):
+
+        if position == ai_position:
+            continue
+
+        if position == player_position:
+            continue
+
+        rect = cell_rect(position)
+
+        overlay = pygame.Surface(
+            (
+                CELL_SIZE - 8,
+                CELL_SIZE - 8
+            ),
+            pygame.SRCALPHA
+        )
+
+        overlay.fill(
+            (40, 220, 240, 65)
+        )
+
+        SCREEN.blit(
+            overlay,
+            (
+                rect.x + 4,
+                rect.y + 4
+            )
+        )
+
+        pygame.draw.circle(
+            SCREEN,
+            CYAN,
+            rect.center,
+            4
+        )
+
+
+# =========================================================
+# DRAW RANGE
+# =========================================================
+
+def draw_attack_range():
+
+    if turn != "PLAYER":
+        return
+
+    if game_over:
+        return
+
+    for position in get_adjacent_positions(
+        player_position
+    ):
+
+        if position in OBSTACLES:
+            continue
+
+        rect = cell_rect(
+            position
+        )
+
+        pygame.draw.rect(
+            SCREEN,
+            (255, 205, 70, 35),
+            rect,
+            width=2,
+            border_radius=5
+        )
+
+
+# =========================================================
+# DRAW PLAYER
 # =========================================================
 
 def draw_player():
 
-    x, y = grid_to_pixel(
+    center = cell_center(
         player_position
     )
 
     pygame.draw.circle(
-        screen,
-        (25, 90, 80),
-        (x, y),
-        25
-    )
-
-    if player_defending:
-
-        pygame.draw.circle(
-            screen,
-            CYAN,
-            (x, y),
-            29,
-            3
-        )
-
-        draw_text(
-            "DEFEND",
-            FONT_SMALL,
-            CYAN,
-            x - 30,
-            y - 45
-        )
-
-    pygame.draw.circle(
-        screen,
-        PLAYER_COLOR,
-        (x, y),
-        17
+        SCREEN,
+        BLUE,
+        center,
+        19
     )
 
     pygame.draw.circle(
-        screen,
+        SCREEN,
         WHITE,
-        (x - 5, y - 5),
-        4
+        center,
+        19,
+        width=2
+    )
+
+    draw_center_text(
+        "P",
+        center,
+        FONT_MEDIUM,
+        WHITE
     )
 
 
 # =========================================================
-# AI
+# DRAW AI
 # =========================================================
 
 def draw_ai():
 
-    x, y = grid_to_pixel(
+    center = cell_center(
         ai_position
     )
 
     pygame.draw.circle(
-        screen,
-        (100, 35, 45),
-        (x, y),
-        25
+        SCREEN,
+        RED,
+        center,
+        19
     )
 
-    if ai_defending:
+    pygame.draw.circle(
+        SCREEN,
+        WHITE,
+        center,
+        19,
+        width=2
+    )
 
-        pygame.draw.circle(
-            screen,
-            YELLOW,
-            (x, y),
-            29,
-            3
+    draw_center_text(
+        "AI",
+        center,
+        FONT_SMALL,
+        WHITE
+    )
+
+
+# =========================================================
+# DRAW SHIELD
+# =========================================================
+
+def draw_shield():
+
+    global shield_animation
+
+    if not shield_animation:
+        return
+
+    elapsed = (
+        pygame.time.get_ticks()
+        -
+        shield_animation_start
+    )
+
+    if elapsed > 650:
+
+        shield_animation = False
+
+        return
+
+    if player_defending:
+
+        center = cell_center(
+            player_position
         )
 
-        draw_text(
-            "DEFEND",
-            FONT_SMALL,
-            YELLOW,
-            x - 30,
-            y - 45
+    else:
+
+        center = cell_center(
+            ai_position
         )
 
-    pygame.draw.circle(
-        screen,
-        AI_COLOR,
-        (x, y),
-        17
+    radius = 28 + int(
+        4 * (elapsed / 650)
     )
 
     pygame.draw.circle(
-        screen,
-        WHITE,
-        (x - 6, y - 4),
-        3
-    )
-
-    pygame.draw.circle(
-        screen,
-        WHITE,
-        (x + 6, y - 4),
-        3
-    )
-
-
-# =========================================================
-# BATTLEFIELD
-# =========================================================
-
-def draw_battlefield():
-
-    pygame.draw.rect(
-        screen,
-        PANEL,
-        BATTLEFIELD_PANEL,
-        border_radius=12
-    )
-
-    pygame.draw.rect(
-        screen,
-        (35, 48, 70),
-        BATTLEFIELD_PANEL,
-        1,
-        border_radius=12
-    )
-
-    draw_character_info()
-
-    draw_grid()
-
-    draw_player()
-
-    draw_ai()
-
-
-# =========================================================
-# AI BRAIN
-# =========================================================
-
-def draw_ai_panel():
-
-    pygame.draw.rect(
-        screen,
-        PANEL,
-        AI_PANEL,
-        border_radius=12
-    )
-
-    pygame.draw.rect(
-        screen,
-        (35, 48, 70),
-        AI_PANEL,
-        1,
-        border_radius=12
-    )
-
-    draw_text(
-        "AI BRAIN",
-        FONT_MEDIUM,
+        SCREEN,
         CYAN,
-        835,
-        110
+        center,
+        radius,
+        width=3
     )
 
-    draw_text(
-        "Decision System",
-        FONT_SMALL,
-        TEXT_MUTED,
-        835,
-        140
-    )
-
-
-    # Algorithm
-
-    draw_text(
-        "Algorithm",
-        FONT_SMALL,
-        TEXT_MUTED,
-        835,
-        180
-    )
-
-    draw_text(
-        "A* + Minimax",
-        FONT_NORMAL,
-        TEXT,
-        835,
-        202
+    pygame.draw.circle(
+        SCREEN,
+        (100, 220, 255),
+        center,
+        radius - 6,
+        width=1
     )
 
 
-    # Current Action
+# =========================================================
+# DRAW ATTACK ANIMATION
+# =========================================================
 
-    draw_text(
-        "Current Action",
-        FONT_SMALL,
-        TEXT_MUTED,
-        980,
-        180
+def draw_attack_animation():
+
+    global attack_animation
+
+    if not attack_animation:
+        return
+
+    elapsed = (
+        pygame.time.get_ticks()
+        -
+        attack_animation_start
     )
 
-    draw_text(
-        ai_current_action,
-        FONT_NORMAL,
+    duration = 300
+
+    if elapsed > duration:
+
+        attack_animation = False
+
+        return
+
+    if not attack_from or not attack_to:
+        return
+
+    start = cell_center(
+        attack_from
+    )
+
+    end = cell_center(
+        attack_to
+    )
+
+    progress = elapsed / duration
+
+    current_x = (
+        start[0]
+        +
+        (end[0] - start[0])
+        * progress
+    )
+
+    current_y = (
+        start[1]
+        +
+        (end[1] - start[1])
+        * progress
+    )
+
+    current = (
+        int(current_x),
+        int(current_y)
+    )
+
+    pygame.draw.line(
+        SCREEN,
         YELLOW,
-        980,
-        202
+        start,
+        current,
+        width=5
     )
 
-
-    # Search Depth
-
-    draw_text(
-        "Search Depth",
-        FONT_SMALL,
-        TEXT_MUTED,
-        835,
-        240
+    pygame.draw.circle(
+        SCREEN,
+        YELLOW,
+        current,
+        12
     )
 
-    draw_text(
-        str(SEARCH_DEPTH),
-        FONT_NORMAL,
-        TEXT,
-        835,
-        262
-    )
-
-
-    # Nodes
-
-    draw_text(
-        "Nodes Explored",
-        FONT_SMALL,
-        TEXT_MUTED,
-        980,
-        240
-    )
-
-    draw_text(
-        str(minimax_nodes),
-        FONT_NORMAL,
-        TEXT,
-        980,
-        262
-    )
-
-
-    # Status
-
-    status_rect = pygame.Rect(
-        835,
-        300,
-        310,
-        35
-    )
-
-    pygame.draw.rect(
-        screen,
-        (25, 45, 55),
-        status_rect,
-        border_radius=7
-    )
-
-    if game_over:
-
-        status = "BATTLE ENDED"
-
-        color = RED
-
-    elif current_turn == PLAYER_TURN:
-
-        status = "YOUR TURN"
-
-        color = GREEN
-
-    else:
-
-        status = "AI THINKING"
-
-        color = CYAN
-
-    centered_text(
-        status,
-        FONT_SMALL,
-        color,
-        status_rect
+    pygame.draw.circle(
+        SCREEN,
+        WHITE,
+        current,
+        5
     )
 
 
 # =========================================================
-# BATTLE LOG
+# DRAW DAMAGE NUMBER
 # =========================================================
 
-def draw_battle_log():
+def draw_damage_number():
 
-    pygame.draw.rect(
-        screen,
-        PANEL,
-        BATTLE_LOG_PANEL,
-        border_radius=12
+    global damage_number
+
+    if damage_number is None:
+        return
+
+    elapsed = (
+        pygame.time.get_ticks()
+        -
+        damage_number_start
     )
 
-    pygame.draw.rect(
-        screen,
-        (35, 48, 70),
-        BATTLE_LOG_PANEL,
-        1,
-        border_radius=12
+    if elapsed > 900:
+
+        damage_number = None
+
+        return
+
+    x, y = damage_number_position
+
+    y -= int(
+        elapsed * 0.04
     )
 
-    draw_text(
-        "BATTLE LOG",
-        FONT_MEDIUM,
-        TEXT,
-        835,
-        400
-    )
-
-    y = 445
-
-    for log in battle_logs:
-
-        draw_text(
-            "> " + log,
-            FONT_SMALL,
-            TEXT_MUTED,
-            835,
-            y
+    alpha = max(
+        0,
+        255 - int(
+            elapsed * 0.28
         )
-
-        y += 35
-
-
-# =========================================================
-# BOTTOM BAR
-# =========================================================
-
-def draw_bottom_bar():
-
-    pygame.draw.rect(
-        screen,
-        PANEL,
-        BOTTOM_BAR,
-        border_radius=10
     )
 
-    if current_turn == PLAYER_TURN:
-
-        draw_text(
-            "YOUR TURN",
-            FONT_NORMAL,
-            PLAYER_COLOR,
-            50,
-            695
-        )
-
-    else:
-
-        draw_text(
-            "AI TURN",
-            FONT_NORMAL,
-            AI_COLOR,
-            50,
-            695
-        )
-
-    draw_text(
-        "WASD / ARROWS  Move",
-        FONT_SMALL,
-        TEXT_MUTED,
-        240,
-        699
+    text_surface = FONT_LARGE.render(
+        f"-{damage_number}",
+        True,
+        YELLOW
     )
 
-    draw_text(
-        "SPACE  Attack",
-        FONT_SMALL,
-        TEXT_MUTED,
-        480,
-        699
+    text_surface.set_alpha(
+        alpha
     )
 
-    draw_text(
-        "F  Defend",
-        FONT_SMALL,
-        TEXT_MUTED,
-        650,
-        699
+    rect = text_surface.get_rect(
+        center=(x, y)
     )
 
-    draw_text(
-        "R  Restart",
-        FONT_SMALL,
-        TEXT_MUTED,
-        800,
-        699
-    )
-
-    draw_text(
-        "ESC  Quit",
-        FONT_SMALL,
-        TEXT_MUTED,
-        900,
-        699
+    SCREEN.blit(
+        text_surface,
+        rect
     )
 
 
 # =========================================================
-# VALID POSITION
+# ATTACK EFFECT
 # =========================================================
 
-def is_valid_position(position):
+def start_attack_animation(
+    attacker,
+    target,
+    damage
+):
 
-    row, col = position
+    global attack_animation
+    global attack_animation_start
 
-    if row < 0 or row >= ROWS:
+    global attack_from
+    global attack_to
 
-        return False
+    global damage_number
+    global damage_number_start
+    global damage_number_position
 
-    if col < 0 or col >= COLS:
+    attack_animation = True
 
-        return False
-
-    if position in obstacles:
-
-        return False
-
-    if position == tuple(ai_position):
-
-        return False
-
-    return True
-
-
-# =========================================================
-# CALCULATE A*
-# =========================================================
-
-def calculate_ai_path():
-
-    global ai_path
-    global ai_nodes_explored
-
-    targets = []
-
-    player = tuple(
-        player_position
+    attack_animation_start = (
+        pygame.time.get_ticks()
     )
 
-    directions = [
+    attack_from = attacker
+    attack_to = target
 
-        (-1, 0),
+    damage_number = damage
 
-        (1, 0),
+    damage_number_start = (
+        pygame.time.get_ticks()
+    )
 
-        (0, -1),
+    damage_number_position = cell_center(
+        target
+    )
 
-        (0, 1)
-    ]
 
-    for dr, dc in directions:
+# =========================================================
+# DEFEND EFFECT
+# =========================================================
 
-        target = (
+def start_shield_animation():
 
-            player[0] + dr,
+    global shield_animation
+    global shield_animation_start
 
-            player[1] + dc
-        )
+    shield_animation = True
 
-        if target[0] < 0:
-            continue
-
-        if target[0] >= ROWS:
-            continue
-
-        if target[1] < 0:
-            continue
-
-        if target[1] >= COLS:
-            continue
-
-        if target in obstacles:
-            continue
-
-        targets.append(
-            target
-        )
-
-    best_path = []
-
-    best_nodes = 0
-
-    for target in targets:
-
-        path, nodes = a_star(
-
-            tuple(ai_position),
-
-            target,
-
-            ROWS,
-
-            COLS,
-
-            obstacles
-        )
-
-        if path:
-
-            if (
-                not best_path
-                or
-                len(path)
-                <
-                len(best_path)
-            ):
-
-                best_path = path
-
-                best_nodes = nodes
-
-    ai_path = best_path
-
-    ai_nodes_explored = best_nodes
+    shield_animation_start = (
+        pygame.time.get_ticks()
+    )
 
 
 # =========================================================
@@ -1245,252 +1000,46 @@ def move_player(
     dc
 ):
 
-    global current_turn
-    global ai_thinking
-    global ai_turn_start
+    global player_position
 
-    if current_turn != PLAYER_TURN:
+    if turn != "PLAYER":
+        return
+
+    if game_over:
         return
 
     new_position = (
-
         player_position[0] + dr,
-
         player_position[1] + dc
     )
 
-    if not is_valid_position(
+    if not is_inside_grid(
         new_position
     ):
+        return
+
+    if new_position in OBSTACLES:
+        add_log(
+            "Cannot move through obstacle."
+        )
+
+        return
+
+    if new_position == ai_position:
 
         add_log(
-            "Movement blocked."
+            "Cannot move onto AI."
         )
 
         return
 
-    player_position[0] = new_position[0]
-
-    player_position[1] = new_position[1]
-
-    player_defending_off()
+    player_position = new_position
 
     add_log(
-        "Player moved."
+        f"Player moved to {player_position}."
     )
 
-    calculate_ai_path()
-
-    current_turn = AI_TURN
-
-    ai_thinking = True
-
-    ai_turn_start = pygame.time.get_ticks()
-
-
-# =========================================================
-# PLAYER DEFENDING OFF
-# =========================================================
-
-def player_defending_off():
-
-    global player_defending
-
-    player_defending = False
-
-
-# =========================================================
-# ATTACK EFFECT
-# =========================================================
-
-def create_attack_effect(
-    attacker,
-    target
-):
-
-    global attack_effect
-
-    attack_effect = {
-
-        "start":
-            grid_to_pixel(attacker),
-
-        "end":
-            grid_to_pixel(target),
-
-        "time":
-            pygame.time.get_ticks()
-    }
-
-
-# =========================================================
-# DAMAGE EFFECT
-# =========================================================
-
-def create_damage_effect(
-    position,
-    damage
-):
-
-    x, y = grid_to_pixel(
-        position
-    )
-
-    damage_effects.append({
-
-        "x": x,
-
-        "y": y,
-
-        "damage": damage,
-
-        "time":
-            pygame.time.get_ticks()
-    })
-
-
-# =========================================================
-# DRAW ATTACK
-# =========================================================
-
-def draw_attack_effect():
-
-    global attack_effect
-
-    if attack_effect is None:
-
-        return
-
-    elapsed = (
-        pygame.time.get_ticks()
-        -
-        attack_effect["time"]
-    )
-
-    if elapsed > 250:
-
-        attack_effect = None
-
-        return
-
-    start_x, start_y = (
-        attack_effect["start"]
-    )
-
-    end_x, end_y = (
-        attack_effect["end"]
-    )
-
-    progress = elapsed / 250
-
-    x = int(
-        start_x
-        +
-        (
-            end_x
-            -
-            start_x
-        )
-        *
-        progress
-    )
-
-    y = int(
-        start_y
-        +
-        (
-            end_y
-            -
-            start_y
-        )
-        *
-        progress
-    )
-
-    pygame.draw.line(
-        screen,
-        WHITE,
-        (
-            start_x,
-            start_y
-        ),
-        (
-            x,
-            y
-        ),
-        6
-    )
-
-    pygame.draw.circle(
-        screen,
-        YELLOW,
-        (
-            x,
-            y
-        ),
-        10
-    )
-
-
-# =========================================================
-# DRAW DAMAGE
-# =========================================================
-
-def draw_damage_effects():
-
-    now = pygame.time.get_ticks()
-
-    remaining = []
-
-    for effect in damage_effects:
-
-        elapsed = (
-            now
-            -
-            effect["time"]
-        )
-
-        if elapsed > 800:
-
-            continue
-
-        y = (
-            effect["y"]
-            -
-            int(elapsed * 0.05)
-        )
-
-        font = pygame.font.SysFont(
-            "arial",
-            24,
-            bold=True
-        )
-
-        surface = font.render(
-            f"-{effect['damage']}",
-            True,
-            WHITE
-        )
-
-        screen.blit(
-            surface,
-            surface.get_rect(
-                center=(
-                    effect["x"],
-                    y
-                )
-            )
-        )
-
-        remaining.append(
-            effect
-        )
-
-    damage_effects.clear()
-
-    damage_effects.extend(
-        remaining
-    )
+    end_player_turn()
 
 
 # =========================================================
@@ -1501,79 +1050,58 @@ def player_attack():
 
     global ai_hp
     global ai_defending
-    global current_turn
-    global ai_thinking
-    global game_over
-    global winner
-    global ai_turn_start
 
-    if current_turn != PLAYER_TURN:
-
+    if turn != "PLAYER":
         return
 
-    distance = get_distance(
+    if game_over:
+        return
+
+    if not can_attack(
         player_position,
         ai_position
-    )
-
-    if distance > ATTACK_RANGE:
+    ):
 
         add_log(
-            "Attack failed → Out of range."
+            "AI is out of attack range."
         )
 
         return
-
-    create_attack_effect(
-        player_position,
-        ai_position
-    )
 
     damage = PLAYER_DAMAGE
 
     if ai_defending:
 
-        damage //= 2
+        damage = int(
+            damage * 0.5
+        )
 
         ai_defending = False
 
         add_log(
-            "AI defense reduced damage."
+            "AI shield reduced damage."
         )
-
-    ai_hp -= damage
 
     ai_hp = max(
         0,
-        ai_hp
+        ai_hp - damage
     )
 
-    create_damage_effect(
+    start_attack_animation(
+        player_position,
         ai_position,
         damage
     )
 
     add_log(
-        f"Player attacked → -{damage} HP"
+        f"Player attacked AI for {damage} damage."
     )
 
-    if ai_hp <= 0:
+    check_game_over()
 
-        game_over = True
+    if not game_over:
 
-        winner = "PLAYER"
-
-        add_log(
-            "PLAYER WINS!"
-        )
-
-        return
-
-    current_turn = AI_TURN
-
-    ai_thinking = True
-
-    ai_turn_start = pygame.time.get_ticks()
+        end_player_turn()
 
 
 # =========================================================
@@ -1583,218 +1111,264 @@ def player_attack():
 def player_defend():
 
     global player_defending
-    global current_turn
-    global ai_thinking
-    global ai_turn_start
 
-    if current_turn != PLAYER_TURN:
+    if turn != "PLAYER":
+        return
 
+    if game_over:
         return
 
     player_defending = True
 
+    start_shield_animation()
+
     add_log(
-        "Player activated defense."
+        "Player is defending."
     )
 
-    current_turn = AI_TURN
+    end_player_turn()
+
+
+# =========================================================
+# END PLAYER TURN
+# =========================================================
+
+def end_player_turn():
+
+    global turn
+    global ai_thinking
+
+    if game_over:
+        return
+
+    turn = "AI"
 
     ai_thinking = True
 
-    ai_turn_start = pygame.time.get_ticks()
+
+# =========================================================
+# BUILD AI STATE
+# =========================================================
+
+def build_ai_state():
+
+    return {
+        "ai_position": ai_position,
+        "player_position": player_position,
+
+        "ai_hp": ai_hp,
+        "player_hp": player_hp,
+
+        "ai_defending": ai_defending,
+        "player_defending": player_defending,
+
+        "rows": ROWS,
+        "cols": COLS,
+
+        "obstacles": set(OBSTACLES),
+    }
 
 
 # =========================================================
-# AI ATTACK
+# FIND A* PATH
 # =========================================================
 
-def ai_attack():
+def calculate_astar():
 
-    global player_hp
-    global player_defending
-    global ai_defending
-    global current_turn
-    global ai_thinking
-    global game_over
-    global winner
-    global round_number
+    global astar_path
+    global astar_nodes
+    global astar_path_cost
+    global astar_time
 
-    create_attack_effect(
-        ai_position,
+    # AI needs to reach a cell adjacent
+    # to the player, not player's cell.
+
+    possible_goals = []
+
+    for position in get_adjacent_positions(
+        player_position
+    ):
+
+        if position in OBSTACLES:
+            continue
+
+        if position == ai_position:
+            continue
+
+        possible_goals.append(
+            position
+        )
+
+    best_path = []
+    best_nodes = 0
+
+    start_time = time.perf_counter()
+
+    # Player cell is treated as obstacle.
+
+    path_obstacles = set(
+        OBSTACLES
+    )
+
+    path_obstacles.add(
         player_position
     )
 
-    damage = AI_DAMAGE
+    for goal in possible_goals:
 
-    if player_defending:
-
-        damage //= 2
-
-        player_defending = False
-
-        add_log(
-            "Player defense reduced damage."
+        path, nodes = a_star(
+            ai_position,
+            goal,
+            ROWS,
+            COLS,
+            path_obstacles
         )
 
-    player_hp -= damage
+        if path:
 
-    player_hp = max(
-        0,
-        player_hp
-    )
+            if not best_path:
 
-    create_damage_effect(
-        player_position,
-        damage
-    )
+                best_path = path
+                best_nodes = nodes
 
-    add_log(
-        f"AI attacked → -{damage} HP"
-    )
+            elif len(path) < len(best_path):
 
-    if player_hp <= 0:
+                best_path = path
+                best_nodes = nodes
 
-        game_over = True
+    end_time = time.perf_counter()
 
-        winner = "AI"
+    astar_path = best_path
 
-        ai_thinking = False
+    astar_nodes = best_nodes
 
-        add_log(
-            "AI WINS!"
-        )
+    if best_path:
 
-        return
-
-    current_turn = PLAYER_TURN
-
-    ai_thinking = False
-
-    round_number += 1
-
-    add_log(
-        "Your turn."
-    )
-
-
-# =========================================================
-# AI DEFEND
-# =========================================================
-
-def ai_defend():
-
-    global ai_defending
-    global current_turn
-    global ai_thinking
-    global round_number
-
-    ai_defending = True
-
-    add_log(
-        "AI activated defense."
-    )
-
-    current_turn = PLAYER_TURN
-
-    ai_thinking = False
-
-    round_number += 1
-
-    add_log(
-        "Your turn."
-    )
-
-
-# =========================================================
-# AI MOVE
-# =========================================================
-
-def ai_move():
-
-    global current_turn
-    global ai_thinking
-    global round_number
-
-    calculate_ai_path()
-
-    if len(ai_path) > 1:
-
-        next_position = ai_path[1]
-
-        ai_position[0] = next_position[0]
-
-        ai_position[1] = next_position[1]
-
-        add_log(
-            "AI moved using A*."
+        astar_path_cost = (
+            len(best_path) - 1
         )
 
     else:
 
-        add_log(
-            "AI could not find a path."
+        astar_path_cost = 0
+
+    astar_time = (
+        end_time - start_time
+    ) * 1000
+
+
+# =========================================================
+# APPLY AI ACTION
+# =========================================================
+
+def execute_ai_action(
+    action
+):
+
+    global ai_position
+    global player_hp
+    global player_defending
+    global ai_defending
+
+    global ai_action_text
+
+    # -----------------------------------------------------
+    # ATTACK
+    # -----------------------------------------------------
+
+    if action == "ATTACK":
+
+        if not can_attack(
+            ai_position,
+            player_position
+        ):
+
+            add_log(
+                "AI tried to attack but player is out of range."
+            )
+
+            return
+
+        damage = AI_DAMAGE
+
+        if player_defending:
+
+            damage = int(
+                damage * 0.5
+            )
+
+            player_defending = False
+
+            add_log(
+                "Player shield reduced AI damage."
+            )
+
+        player_hp = max(
+            0,
+            player_hp - damage
         )
 
-    current_turn = PLAYER_TURN
+        start_attack_animation(
+            ai_position,
+            player_position,
+            damage
+        )
 
-    ai_thinking = False
+        add_log(
+            f"AI attacked Player for {damage} damage."
+        )
 
-    round_number += 1
+    # -----------------------------------------------------
+    # DEFEND
+    # -----------------------------------------------------
 
-    add_log(
-        "Your turn."
-    )
+    elif action == "DEFEND":
 
+        ai_defending = True
 
-# =========================================================
-# MINIMAX AI DECISION
-# =========================================================
+        start_shield_animation()
 
-def ai_make_decision():
+        add_log(
+            "AI is defending."
+        )
 
-    global minimax_nodes
+    # -----------------------------------------------------
+    # MOVE
+    # -----------------------------------------------------
 
-    global minimax_score
+    elif (
+        isinstance(action, tuple)
+        and
+        action[0] == "MOVE"
+    ):
 
-    global ai_current_action
+        new_position = action[1]
 
-    state = {
+        if new_position in OBSTACLES:
 
-        "ai_hp": ai_hp,
+            add_log(
+                "AI cannot move through obstacle."
+            )
 
-        "player_hp": player_hp,
+            return
 
-        "ai_position":
-            list(ai_position),
+        if new_position == player_position:
 
-        "player_position":
-            list(player_position),
+            add_log(
+                "AI cannot move onto Player."
+            )
 
-        "ai_defending":
-            ai_defending,
+            return
 
-        "player_defending":
-            player_defending
-    }
+        if is_inside_grid(
+            new_position
+        ):
 
-    action, score, nodes = get_best_action(
+            ai_position = new_position
 
-        state,
-
-        SEARCH_DEPTH
-    )
-
-    ai_current_action = action
-
-    minimax_score = score
-
-    minimax_nodes = nodes
-
-    add_log(
-        f"Minimax → {action}"
-    )
-
-    return action
+            add_log(
+                f"AI moved to {ai_position}."
+            )
 
 
 # =========================================================
@@ -1803,48 +1377,649 @@ def ai_make_decision():
 
 def run_ai_turn():
 
-    action = ai_make_decision()
+    global turn
+    global ai_thinking
 
-    # =====================================================
-    # ATTACK
-    # =====================================================
+    global ai_action_text
+
+    global minimax_nodes
+    global minimax_pruned
+    global minimax_time
+    global minimax_score
+
+    if game_over:
+        return
+
+    # -----------------------------------------------------
+    # A* SEARCH
+    # -----------------------------------------------------
+
+    calculate_astar()
+
+    # -----------------------------------------------------
+    # MINIMAX
+    # -----------------------------------------------------
+
+    state = build_ai_state()
+
+    start_time = time.perf_counter()
+
+    (
+        best_action,
+        best_score,
+        nodes,
+        pruned
+    ) = get_best_action(
+        state,
+        depth=AI_DEPTH
+    )
+
+    end_time = time.perf_counter()
+
+    minimax_time = (
+        end_time - start_time
+    ) * 1000
+
+    minimax_nodes = nodes
+    minimax_pruned = pruned
+    minimax_score = best_score
+
+    ai_action_text = format_ai_action(
+        best_action
+    )
+
+    # -----------------------------------------------------
+    # EXECUTE ACTION
+    # -----------------------------------------------------
+
+    execute_ai_action(
+        best_action
+    )
+
+    check_game_over()
+
+    if not game_over:
+
+        turn = "PLAYER"
+
+        ai_thinking = False
+
+        add_log(
+            "Your turn."
+        )
+
+
+# =========================================================
+# FORMAT AI ACTION
+# =========================================================
+
+def format_ai_action(action):
 
     if action == "ATTACK":
 
-        ai_attack()
+        return "ATTACK"
 
-    # =====================================================
-    # DEFEND
-    # =====================================================
+    if action == "DEFEND":
 
-    elif action == "DEFEND":
+        return "DEFEND"
 
-        ai_defend()
+    if (
+        isinstance(action, tuple)
+        and
+        action[0] == "MOVE"
+    ):
 
-    # =====================================================
-    # MOVE
-    # =====================================================
+        return (
+            f"MOVE → {action[1]}"
+        )
 
-    else:
-
-        ai_move()
+    return str(action)
 
 
 # =========================================================
-# PLAYER INPUT
+# GAME OVER
 # =========================================================
 
-def handle_input(key):
+def check_game_over():
+
+    global game_over
+    global winner
+    global ai_thinking
+
+    if player_hp <= 0:
+
+        player_hp_value = 0
+
+        game_over = True
+
+        winner = "AI"
+
+        ai_thinking = False
+
+        add_log(
+            "AI wins the battle."
+        )
+
+        return
+
+    if ai_hp <= 0:
+
+        game_over = True
+
+        winner = "PLAYER"
+
+        ai_thinking = False
+
+        add_log(
+            "Player wins the battle."
+        )
+
+        return
+
+
+# =========================================================
+# AI BRAIN PANEL
+# =========================================================
+
+def draw_ai_brain_panel():
+
+    rect = pygame.Rect(
+        735,
+        90,
+        420,
+        340
+    )
+
+    draw_panel(
+        rect,
+        "AI BRAIN"
+    )
+
+    y = rect.y + 55
+
+    draw_text(
+        "Algorithms",
+        (rect.x + 18, y),
+        FONT_SMALL,
+        GRAY
+    )
+
+    draw_text(
+        "A* + Minimax",
+        (rect.x + 180, y),
+        FONT_NORMAL,
+        CYAN
+    )
+
+    y += 30
+
+    draw_text(
+        "Alpha-Beta",
+        (rect.x + 18, y),
+        FONT_SMALL,
+        GRAY
+    )
+
+    draw_text(
+        "Enabled",
+        (rect.x + 180, y),
+        FONT_NORMAL,
+        GREEN
+    )
+
+    y += 30
+
+    draw_text(
+        "Search Depth",
+        (rect.x + 18, y),
+        FONT_SMALL,
+        GRAY
+    )
+
+    draw_text(
+        str(AI_DEPTH),
+        (rect.x + 180, y),
+        FONT_NORMAL,
+        WHITE
+    )
+
+    y += 30
+
+    draw_text(
+        "Current Action",
+        (rect.x + 18, y),
+        FONT_SMALL,
+        GRAY
+    )
+
+    draw_text(
+        ai_action_text,
+        (rect.x + 180, y),
+        FONT_NORMAL,
+        YELLOW
+    )
+
+    y += 35
+
+    # A* section
+
+    draw_text(
+        "A* Search",
+        (rect.x + 18, y),
+        FONT_MEDIUM,
+        CYAN
+    )
+
+    y += 28
+
+    draw_text(
+        f"Nodes: {astar_nodes}",
+        (rect.x + 18, y),
+        FONT_SMALL,
+        WHITE
+    )
+
+    draw_text(
+        f"Path Cost: {astar_path_cost}",
+        (rect.x + 190, y),
+        FONT_SMALL,
+        WHITE
+    )
+
+    y += 25
+
+    draw_text(
+        f"Time: {astar_time:.3f} ms",
+        (rect.x + 18, y),
+        FONT_SMALL,
+        WHITE
+    )
+
+    y += 32
+
+    # Minimax section
+
+    draw_text(
+        "Minimax + Alpha-Beta",
+        (rect.x + 18, y),
+        FONT_MEDIUM,
+        PURPLE
+    )
+
+    y += 28
+
+    draw_text(
+        f"Nodes: {minimax_nodes}",
+        (rect.x + 18, y),
+        FONT_SMALL,
+        WHITE
+    )
+
+    draw_text(
+        f"Pruned: {minimax_pruned}",
+        (rect.x + 190, y),
+        FONT_SMALL,
+        GREEN
+    )
+
+    y += 25
+
+    draw_text(
+        f"Time: {minimax_time:.3f} ms",
+        (rect.x + 18, y),
+        FONT_SMALL,
+        WHITE
+    )
+
+    draw_text(
+        f"Score: {minimax_score}",
+        (rect.x + 190, y),
+        FONT_SMALL,
+        WHITE
+    )
+
+
+# =========================================================
+# BATTLE LOG
+# =========================================================
+
+def draw_battle_log():
+
+    rect = pygame.Rect(
+        735,
+        440,
+        420,
+        165
+    )
+
+    draw_panel(
+        rect,
+        "BATTLE LOG"
+    )
+
+    y = rect.y + 48
+
+    for message in battle_log:
+
+        draw_text(
+            "• " + message,
+            (
+                rect.x + 15,
+                y
+            ),
+            FONT_SMALL,
+            GRAY
+        )
+
+        y += 17
+
+        if y > rect.bottom - 15:
+            break
+
+
+# =========================================================
+# TOP BAR
+# =========================================================
+
+def draw_top_bar():
+
+    draw_text(
+        "AI BATTLE ARENA",
+        (45, 25),
+        FONT_TITLE,
+        WHITE
+    )
+
+    draw_text(
+        "A* Pathfinding  •  Minimax  •  Alpha-Beta",
+        (48, 67),
+        FONT_SMALL,
+        GRAY
+    )
+
+    # Turn indicator
 
     if game_over:
 
+        turn_text = (
+            f"{winner} WINS"
+        )
+
+        turn_color = YELLOW
+
+    elif ai_thinking:
+
+        turn_text = "AI THINKING..."
+
+        turn_color = PURPLE
+
+    elif turn == "PLAYER":
+
+        turn_text = "YOUR TURN"
+
+        turn_color = CYAN
+
+    else:
+
+        turn_text = "AI TURN"
+
+        turn_color = RED
+
+    draw_center_text(
+        turn_text,
+        (960, 48),
+        FONT_MEDIUM,
+        turn_color
+    )
+
+
+# =========================================================
+# PLAYER / AI STATUS
+# =========================================================
+
+def draw_status_panel():
+
+    rect = pygame.Rect(
+        45,
+        610,
+        1110,
+        75
+    )
+
+    draw_panel(
+        rect
+    )
+
+    draw_hp_bar(
+        65,
+        640,
+        250,
+        14,
+        player_hp,
+        MAX_HP,
+        "PLAYER",
+        BLUE
+    )
+
+    draw_hp_bar(
+        360,
+        640,
+        250,
+        14,
+        ai_hp,
+        MAX_HP,
+        "AI",
+        RED
+    )
+
+    draw_text(
+        "WASD / Arrow Keys",
+        (665, 615),
+        FONT_SMALL,
+        GRAY
+    )
+
+    draw_text(
+        "Move",
+        (665, 635),
+        FONT_NORMAL,
+        WHITE
+    )
+
+    draw_text(
+        "SPACE",
+        (770, 615),
+        FONT_SMALL,
+        GRAY
+    )
+
+    draw_text(
+        "Attack",
+        (770, 635),
+        FONT_NORMAL,
+        WHITE
+    )
+
+    draw_text(
+        "F",
+        (870, 615),
+        FONT_SMALL,
+        GRAY
+    )
+
+    draw_text(
+        "Defend",
+        (870, 635),
+        FONT_NORMAL,
+        WHITE
+    )
+
+    draw_text(
+        "R",
+        (970, 615),
+        FONT_SMALL,
+        GRAY
+    )
+
+    draw_text(
+        "Restart",
+        (970, 635),
+        FONT_NORMAL,
+        WHITE
+    )
+
+
+# =========================================================
+# GAME OVER OVERLAY
+# =========================================================
+
+def draw_game_over():
+
+    if not game_over:
         return
 
-    if current_turn != PLAYER_TURN:
+    overlay = pygame.Surface(
+        (WIDTH, HEIGHT),
+        pygame.SRCALPHA
+    )
+
+    overlay.fill(
+        (0, 0, 0, 170)
+    )
+
+    SCREEN.blit(
+        overlay,
+        (0, 0)
+    )
+
+    center_x = WIDTH // 2
+    center_y = HEIGHT // 2
+
+    if winner == "PLAYER":
+
+        title = "YOU WIN!"
+
+        title_color = GREEN
+
+    else:
+
+        title = "AI WINS"
+
+        title_color = RED
+
+    draw_center_text(
+        title,
+        (
+            center_x,
+            center_y - 45
+        ),
+        FONT_TITLE,
+        title_color
+    )
+
+    draw_center_text(
+        "Press R to restart",
+        (
+            center_x,
+            center_y + 15
+        ),
+        FONT_NORMAL,
+        WHITE
+    )
+
+
+# =========================================================
+# DRAW ALL
+# =========================================================
+
+def draw():
+
+    SCREEN.fill(
+        BG_COLOR
+    )
+
+    # Top
+
+    draw_top_bar()
+
+    # Main battlefield panel
+
+    battlefield_rect = pygame.Rect(
+        25,
+        90,
+        680,
+        480
+    )
+
+    draw_panel(
+        battlefield_rect,
+        "BATTLEFIELD"
+    )
+
+    # Grid
+
+    draw_grid()
+
+    draw_attack_range()
+
+    draw_astar_path()
+
+    draw_player()
+
+    draw_ai()
+
+    draw_attack_animation()
+
+    draw_shield()
+
+    draw_damage_number()
+
+    # Right panels
+
+    draw_ai_brain_panel()
+
+    draw_battle_log()
+
+    # Bottom
+
+    draw_status_panel()
+
+    # Game over
+
+    draw_game_over()
+
+    pygame.display.flip()
+
+
+# =========================================================
+# KEYBOARD HANDLING
+# =========================================================
+
+def handle_keydown(event):
+
+    if event.key == pygame.K_ESCAPE:
+
+        pygame.quit()
+
+        sys.exit()
+
+    if event.key == pygame.K_r:
+
+        reset_game()
 
         return
 
-    if key in (
+    if game_over:
+        return
+
+    if turn != "PLAYER":
+        return
+
+    # -----------------------------------------------------
+    # MOVEMENT
+    # -----------------------------------------------------
+
+    if event.key in (
         pygame.K_w,
         pygame.K_UP
     ):
@@ -1854,7 +2029,7 @@ def handle_input(key):
             0
         )
 
-    elif key in (
+    elif event.key in (
         pygame.K_s,
         pygame.K_DOWN
     ):
@@ -1864,7 +2039,7 @@ def handle_input(key):
             0
         )
 
-    elif key in (
+    elif event.key in (
         pygame.K_a,
         pygame.K_LEFT
     ):
@@ -1874,7 +2049,7 @@ def handle_input(key):
             -1
         )
 
-    elif key in (
+    elif event.key in (
         pygame.K_d,
         pygame.K_RIGHT
     ):
@@ -1884,298 +2059,88 @@ def handle_input(key):
             1
         )
 
-    elif key == pygame.K_SPACE:
+    # -----------------------------------------------------
+    # ATTACK
+    # -----------------------------------------------------
+
+    elif event.key == pygame.K_SPACE:
 
         player_attack()
 
-    elif key == pygame.K_f:
+    # -----------------------------------------------------
+    # DEFEND
+    # -----------------------------------------------------
+
+    elif event.key == pygame.K_f:
 
         player_defend()
-
-
-# =========================================================
-# RESTART
-# =========================================================
-
-def restart_game():
-
-    global player_position
-    global ai_position
-
-    global player_hp
-    global ai_hp
-
-    global player_defending
-    global ai_defending
-
-    global current_turn
-    global round_number
-
-    global game_over
-    global winner
-
-    global ai_thinking
-
-    global ai_path
-    global ai_nodes_explored
-
-    global minimax_nodes
-    global minimax_score
-
-    global ai_current_action
-
-    global battle_logs
-
-    player_position = [2, 2]
-
-    ai_position = [5, 9]
-
-    player_hp = 100
-
-    ai_hp = 100
-
-    player_defending = False
-
-    ai_defending = False
-
-    current_turn = PLAYER_TURN
-
-    round_number = 1
-
-    game_over = False
-
-    winner = None
-
-    ai_thinking = False
-
-    ai_path = []
-
-    ai_nodes_explored = 0
-
-    minimax_nodes = 0
-
-    minimax_score = 0
-
-    ai_current_action = "WAITING"
-
-    battle_logs = [
-
-        "Battle initialized.",
-
-        "Player deployed.",
-
-        "AI opponent deployed.",
-
-        "Your turn."
-    ]
-
-    calculate_ai_path()
-
-
-# =========================================================
-# GAME OVER
-# =========================================================
-
-def draw_game_over():
-
-    if not game_over:
-
-        return
-
-    overlay = pygame.Surface(
-        (
-            SCREEN_WIDTH,
-            SCREEN_HEIGHT
-        ),
-        pygame.SRCALPHA
-    )
-
-    overlay.fill(
-        (5, 8, 15, 190)
-    )
-
-    screen.blit(
-        overlay,
-        (0, 0)
-    )
-
-    panel = pygame.Rect(
-        300,
-        235,
-        600,
-        280
-    )
-
-    pygame.draw.rect(
-        screen,
-        PANEL,
-        panel,
-        border_radius=18
-    )
-
-    color = (
-        PLAYER_COLOR
-        if winner == "PLAYER"
-        else RED
-    )
-
-    pygame.draw.rect(
-        screen,
-        color,
-        panel,
-        2,
-        border_radius=18
-    )
-
-    title = (
-        "VICTORY!"
-        if winner == "PLAYER"
-        else "DEFEATED"
-    )
-
-    centered_text(
-        title,
-        FONT_HUGE,
-        color,
-        pygame.Rect(
-            350,
-            290,
-            500,
-            60
-        )
-    )
-
-    message = (
-
-        "You defeated the AI opponent."
-
-        if winner == "PLAYER"
-
-        else
-
-        "The AI defeated you."
-    )
-
-    centered_text(
-        message,
-        FONT_NORMAL,
-        TEXT,
-        pygame.Rect(
-            350,
-            370,
-            500,
-            40
-        )
-    )
-
-    centered_text(
-        "Press R to restart",
-        FONT_NORMAL,
-        TEXT_MUTED,
-        pygame.Rect(
-            350,
-            430,
-            500,
-            40
-        )
-    )
-
-
-# =========================================================
-# INITIAL PATH
-# =========================================================
-
-calculate_ai_path()
 
 
 # =========================================================
 # MAIN LOOP
 # =========================================================
 
-clock = pygame.time.Clock()
+def main():
 
-running = True
+    global ai_thinking
 
+    reset_game()
 
-while running:
+    running = True
 
-    # =====================================================
-    # EVENTS
-    # =====================================================
+    while running:
 
-    for event in pygame.event.get():
+        # -------------------------------------------------
+        # EVENTS
+        # -------------------------------------------------
 
-        if event.type == pygame.QUIT:
+        for event in pygame.event.get():
 
-            running = False
-
-        if event.type == pygame.KEYDOWN:
-
-            if event.key == pygame.K_ESCAPE:
+            if event.type == pygame.QUIT:
 
                 running = False
 
-            elif event.key == pygame.K_r:
+            elif event.type == pygame.KEYDOWN:
 
-                restart_game()
-
-            else:
-
-                handle_input(
-                    event.key
+                handle_keydown(
+                    event
                 )
 
+        # -------------------------------------------------
+        # AI TURN
+        # -------------------------------------------------
 
-    # =====================================================
-    # AI TURN
-    # =====================================================
+        if (
+            turn == "AI"
+            and
+            ai_thinking
+            and
+            not game_over
+        ):
 
-    if (
-        current_turn == AI_TURN
-        and ai_thinking
-        and not game_over
-    ):
-
-        now = pygame.time.get_ticks()
-
-        if now - ai_turn_start > 700:
+            pygame.time.delay(
+                AI_THINK_DELAY
+            )
 
             run_ai_turn()
 
+        # -------------------------------------------------
+        # DRAW
+        # -------------------------------------------------
 
-    # =====================================================
-    # DRAW
-    # =====================================================
+        draw()
 
-    screen.fill(
-        BACKGROUND
-    )
+        CLOCK.tick(60)
 
-    draw_header()
+    pygame.quit()
 
-    draw_battlefield()
-
-    draw_ai_panel()
-
-    draw_battle_log()
-
-    draw_bottom_bar()
-
-    draw_attack_effect()
-
-    draw_damage_effects()
-
-    draw_game_over()
-
-    pygame.display.flip()
-
-    clock.tick(60)
+    sys.exit()
 
 
 # =========================================================
-# EXIT
+# PROGRAM START
 # =========================================================
 
-pygame.quit()
+if __name__ == "__main__":
 
-sys.exit()
+    main()

@@ -5,67 +5,168 @@
 
 
 # =========================================================
-# CONSTANTS
+# GAME CONSTANTS
 # =========================================================
 
-ATTACK_DAMAGE = 15
-
-DEFEND_REDUCTION = 0.5
+PLAYER_DAMAGE = 20
+AI_DAMAGE = 15
 
 ATTACK_RANGE = 1
+
+DEFEND_REDUCTION = 0.5
 
 
 # =========================================================
 # DISTANCE
 # =========================================================
 
-def get_distance(ai_position, player_position):
+def get_distance(position_a, position_b):
+
+    row_a, col_a = position_a
+    row_b, col_b = position_b
 
     return (
-        abs(ai_position[0] - player_position[0])
-        +
-        abs(ai_position[1] - player_position[1])
+        abs(row_a - row_b)
+        + abs(col_a - col_b)
     )
 
 
 # =========================================================
-# CHECK ATTACK RANGE
+# ATTACK CHECK
 # =========================================================
 
-def can_attack(ai_position, player_position):
+def can_attack(attacker_position, target_position):
 
-    distance = get_distance(
-        ai_position,
-        player_position
+    return (
+        get_distance(
+            attacker_position,
+            target_position
+        )
+        <= ATTACK_RANGE
     )
 
-    return distance <= ATTACK_RANGE
-
 
 # =========================================================
-# GENERATE POSSIBLE ACTIONS
+# VALID POSITION
 # =========================================================
 
-def get_possible_actions(
-    ai_position,
+def is_valid_position(
+    position,
+    rows,
+    cols,
+    obstacles,
     player_position
 ):
 
-    actions = [
-        "ATTACK",
-        "DEFEND",
-        "MOVE"
+    row, col = position
+
+    # Outside grid
+    if row < 0 or row >= rows:
+        return False
+
+    if col < 0 or col >= cols:
+        return False
+
+    # Obstacle
+    if position in obstacles:
+        return False
+
+    # AI cannot move onto player cell
+    if position == player_position:
+        return False
+
+    return True
+
+
+# =========================================================
+# GET VALID MOVES
+# =========================================================
+
+def get_valid_moves(state):
+
+    ai_position = state["ai_position"]
+    player_position = state["player_position"]
+
+    rows = state.get("rows", 8)
+    cols = state.get("cols", 12)
+
+    obstacles = state.get(
+        "obstacles",
+        set()
+    )
+
+    row, col = ai_position
+
+    directions = [
+        (-1, 0),   # UP
+        (1, 0),    # DOWN
+        (0, -1),   # LEFT
+        (0, 1),    # RIGHT
     ]
 
-    # If AI is not close enough,
-    # attacking is not possible.
+    valid_moves = []
 
-    if not can_attack(
+    for row_change, col_change in directions:
+
+        new_position = (
+            row + row_change,
+            col + col_change
+        )
+
+        if is_valid_position(
+            new_position,
+            rows,
+            cols,
+            obstacles,
+            player_position
+        ):
+
+            valid_moves.append(
+                new_position
+            )
+
+    return valid_moves
+
+
+# =========================================================
+# GET POSSIBLE ACTIONS
+# =========================================================
+
+def get_possible_actions(state):
+
+    actions = []
+
+    ai_position = state["ai_position"]
+    player_position = state["player_position"]
+
+    # -----------------------------------------------------
+    # ATTACK
+    # -----------------------------------------------------
+
+    if can_attack(
         ai_position,
         player_position
     ):
 
-        actions.remove("ATTACK")
+        actions.append("ATTACK")
+
+    # -----------------------------------------------------
+    # DEFEND
+    # -----------------------------------------------------
+
+    actions.append("DEFEND")
+
+    # -----------------------------------------------------
+    # MOVE
+    # -----------------------------------------------------
+
+    valid_moves = get_valid_moves(state)
+
+    for position in valid_moves:
+
+        actions.append(
+            ("MOVE", position)
+        )
 
     return actions
 
@@ -74,21 +175,22 @@ def get_possible_actions(
 # EVALUATION FUNCTION
 # =========================================================
 
-def evaluate_state(state):
+def evaluate(state):
 
     ai_hp = state["ai_hp"]
-
     player_hp = state["player_hp"]
 
     ai_position = state["ai_position"]
-
     player_position = state["player_position"]
 
-    ai_defending = state["ai_defending"]
+    ai_defending = state.get(
+        "ai_defending",
+        False
+    )
 
-    distance = get_distance(
-        ai_position,
-        player_position
+    player_defending = state.get(
+        "player_defending",
+        False
     )
 
     # =====================================================
@@ -107,27 +209,35 @@ def evaluate_state(state):
     # BASIC HP ADVANTAGE
     # =====================================================
 
-    score = (
-        ai_hp
-        -
-        player_hp
-    )
+    score = ai_hp - player_hp
 
     # =====================================================
-    # DISTANCE BONUS
+    # DISTANCE ADVANTAGE
     # =====================================================
+
+    distance = get_distance(
+        ai_position,
+        player_position
+    )
 
     if distance == 1:
 
-        score += 20
+        score += 30
 
     elif distance == 2:
 
-        score += 10
+        score += 15
 
     elif distance == 3:
 
         score += 5
+
+    else:
+
+        score -= min(
+            distance,
+            10
+        )
 
     # =====================================================
     # DEFENSE BONUS
@@ -137,6 +247,10 @@ def evaluate_state(state):
 
         score += 15
 
+    if player_defending:
+
+        score -= 10
+
     return score
 
 
@@ -144,31 +258,30 @@ def evaluate_state(state):
 # APPLY AI ACTION
 # =========================================================
 
-def apply_action(
+def apply_ai_action(
     state,
     action
 ):
 
-    new_state = {
+    new_state = state.copy()
 
-        "ai_hp": state["ai_hp"],
+    new_state["ai_position"] = (
+        state["ai_position"]
+    )
 
-        "player_hp": state["player_hp"],
+    new_state["ai_defending"] = (
+        state.get(
+            "ai_defending",
+            False
+        )
+    )
 
-        "ai_position": list(
-            state["ai_position"]
-        ),
-
-        "player_position": list(
-            state["player_position"]
-        ),
-
-        "ai_defending":
-            state["ai_defending"],
-
-        "player_defending":
-            state["player_defending"]
-    }
+    new_state["player_defending"] = (
+        state.get(
+            "player_defending",
+            False
+        )
+    )
 
     # =====================================================
     # ATTACK
@@ -177,29 +290,25 @@ def apply_action(
     if action == "ATTACK":
 
         if can_attack(
-            new_state["ai_position"],
-            new_state["player_position"]
+            state["ai_position"],
+            state["player_position"]
         ):
 
-            damage = ATTACK_DAMAGE
+            damage = AI_DAMAGE
 
-            if new_state["player_defending"]:
+            if state.get(
+                "player_defending",
+                False
+            ):
 
                 damage = int(
                     damage
-                    *
-                    DEFEND_REDUCTION
+                    * DEFEND_REDUCTION
                 )
-
-                new_state[
-                    "player_defending"
-                ] = False
 
             new_state["player_hp"] = max(
                 0,
-                new_state["player_hp"]
-                -
-                damage
+                state["player_hp"] - damage
             )
 
     # =====================================================
@@ -208,60 +317,92 @@ def apply_action(
 
     elif action == "DEFEND":
 
-        new_state[
-            "ai_defending"
-        ] = True
+        new_state["ai_defending"] = True
 
     # =====================================================
     # MOVE
     # =====================================================
 
-    elif action == "MOVE":
+    elif (
+        isinstance(action, tuple)
+        and action[0] == "MOVE"
+    ):
 
-        ai_row, ai_col = (
-            new_state["ai_position"]
+        new_position = action[1]
+
+        valid_moves = get_valid_moves(
+            state
         )
 
-        player_row, player_col = (
-            new_state["player_position"]
+        if new_position in valid_moves:
+
+            new_state["ai_position"] = (
+                new_position
+            )
+
+    return new_state
+
+
+# =========================================================
+# APPLY PLAYER ACTION
+# =========================================================
+
+def apply_player_action(
+    state,
+    action
+):
+
+    new_state = state.copy()
+
+    new_state["ai_defending"] = (
+        state.get(
+            "ai_defending",
+            False
         )
+    )
 
-        # Move one step toward player
-
-        row_difference = (
-            player_row - ai_row
+    new_state["player_defending"] = (
+        state.get(
+            "player_defending",
+            False
         )
+    )
 
-        col_difference = (
-            player_col - ai_col
-        )
+    # =====================================================
+    # PLAYER ATTACK
+    # =====================================================
 
-        if abs(row_difference) >= abs(
-            col_difference
+    if action == "ATTACK":
+
+        if can_attack(
+            state["player_position"],
+            state["ai_position"]
         ):
 
-            if row_difference > 0:
+            damage = PLAYER_DAMAGE
 
-                ai_row += 1
+            if state.get(
+                "ai_defending",
+                False
+            ):
 
-            elif row_difference < 0:
+                damage = int(
+                    damage
+                    * DEFEND_REDUCTION
+                )
 
-                ai_row -= 1
+            new_state["ai_hp"] = max(
+                0,
+                state["ai_hp"] - damage
+            )
 
-        else:
+    # =====================================================
+    # PLAYER DEFEND
+    # =====================================================
 
-            if col_difference > 0:
+    elif action == "DEFEND":
 
-                ai_col += 1
-
-            elif col_difference < 0:
-
-                ai_col -= 1
-
-        new_state["ai_position"] = [
-            ai_row,
-            ai_col
-        ]
+        new_state["player_defending"] = True
 
     return new_state
 
@@ -276,10 +417,14 @@ def minimax(
     maximizing_player,
     alpha,
     beta,
-    nodes
+    stats
 ):
 
-    nodes[0] += 1
+    # =====================================================
+    # COUNT NODE
+    # =====================================================
+
+    stats["nodes"] += 1
 
     # =====================================================
     # TERMINAL CONDITION
@@ -287,59 +432,57 @@ def minimax(
 
     if depth == 0:
 
-        return evaluate_state(
-            state
-        )
-
-    if state["player_hp"] <= 0:
-
-        return evaluate_state(
-            state
-        )
+        return evaluate(state)
 
     if state["ai_hp"] <= 0:
 
-        return evaluate_state(
-            state
-        )
+        return evaluate(state)
+
+    if state["player_hp"] <= 0:
+
+        return evaluate(state)
 
     # =====================================================
-    # AI MAXIMIZING
+    # AI TURN - MAXIMIZING
     # =====================================================
 
     if maximizing_player:
 
-        max_evaluation = float("-inf")
+        best_score = float("-inf")
 
         actions = get_possible_actions(
-            state["ai_position"],
-            state["player_position"]
+            state
         )
+
+        # No possible action
+        if not actions:
+
+            return evaluate(state)
 
         for action in actions:
 
-            new_state = apply_action(
+            new_state = apply_ai_action(
                 state,
                 action
             )
 
-            evaluation = minimax(
+            score = minimax(
                 new_state,
                 depth - 1,
                 False,
                 alpha,
                 beta,
-                nodes
+                stats
             )
 
-            max_evaluation = max(
-                max_evaluation,
-                evaluation
+            best_score = max(
+                best_score,
+                score
             )
 
             alpha = max(
                 alpha,
-                evaluation
+                best_score
             )
 
             # =================================================
@@ -348,97 +491,50 @@ def minimax(
 
             if beta <= alpha:
 
+                stats["pruned"] += 1
+
                 break
 
-        return max_evaluation
+        return best_score
 
     # =====================================================
-    # PLAYER MINIMIZING
+    # PLAYER TURN - MINIMIZING
     # =====================================================
 
     else:
 
-        min_evaluation = float("inf")
+        best_score = float("inf")
 
-        actions = [
+        # Player's possible actions
+        player_actions = [
             "ATTACK",
             "DEFEND"
         ]
 
-        for action in actions:
+        for action in player_actions:
 
-            new_state = {
+            new_state = apply_player_action(
+                state,
+                action
+            )
 
-                "ai_hp":
-                    state["ai_hp"],
-
-                "player_hp":
-                    state["player_hp"],
-
-                "ai_position":
-                    list(
-                        state["ai_position"]
-                    ),
-
-                "player_position":
-                    list(
-                        state["player_position"]
-                    ),
-
-                "ai_defending":
-                    state["ai_defending"],
-
-                "player_defending":
-                    state["player_defending"]
-            }
-
-            if action == "ATTACK":
-
-                if can_attack(
-                    new_state["ai_position"],
-                    new_state["player_position"]
-                ):
-
-                    damage = 20
-
-                    if new_state[
-                        "ai_defending"
-                    ]:
-
-                        damage //= 2
-
-                    new_state[
-                        "ai_hp"
-                    ] = max(
-                        0,
-                        new_state["ai_hp"]
-                        -
-                        damage
-                    )
-
-            elif action == "DEFEND":
-
-                new_state[
-                    "player_defending"
-                ] = True
-
-            evaluation = minimax(
+            score = minimax(
                 new_state,
                 depth - 1,
                 True,
                 alpha,
                 beta,
-                nodes
+                stats
             )
 
-            min_evaluation = min(
-                min_evaluation,
-                evaluation
+            best_score = min(
+                best_score,
+                score
             )
 
             beta = min(
                 beta,
-                evaluation
+                best_score
             )
 
             # =================================================
@@ -447,13 +543,15 @@ def minimax(
 
             if beta <= alpha:
 
+                stats["pruned"] += 1
+
                 break
 
-        return min_evaluation
+        return best_score
 
 
 # =========================================================
-# FIND BEST AI ACTION
+# GET BEST AI ACTION
 # =========================================================
 
 def get_best_action(
@@ -462,23 +560,26 @@ def get_best_action(
 ):
 
     actions = get_possible_actions(
-        state["ai_position"],
-        state["player_position"]
+        state
     )
 
     if not actions:
 
-        return "MOVE", 0, 0
+        return (
+            "DEFEND",
+            0,
+            0,
+            0
+        )
 
     best_action = actions[0]
 
     best_score = float("-inf")
 
-    nodes = [0]
-
-    alpha = float("-inf")
-
-    beta = float("inf")
+    stats = {
+        "nodes": 0,
+        "pruned": 0
+    }
 
     # =====================================================
     # TEST EVERY ACTION
@@ -486,7 +587,7 @@ def get_best_action(
 
     for action in actions:
 
-        new_state = apply_action(
+        new_state = apply_ai_action(
             state,
             action
         )
@@ -495,9 +596,9 @@ def get_best_action(
             new_state,
             depth - 1,
             False,
-            alpha,
-            beta,
-            nodes
+            float("-inf"),
+            float("inf"),
+            stats
         )
 
         if score > best_score:
@@ -506,13 +607,9 @@ def get_best_action(
 
             best_action = action
 
-        alpha = max(
-            alpha,
-            best_score
-        )
-
     return (
         best_action,
         best_score,
-        nodes[0]
+        stats["nodes"],
+        stats["pruned"]
     )

@@ -116,6 +116,21 @@ AI_DEPTH = 3
 
 AI_THINK_DELAY = 700
 
+# ---------------------------------------------------------
+# HYBRID AI (A* + MINIMAX)
+#
+# True  -> When the player is out of attack range, A*
+#          decides the actual step toward the player
+#          (it can go around obstacles).
+#          Minimax decides everything once the AI is
+#          in attack range (ATTACK / DEFEND / MOVE).
+#
+# False -> Minimax alone decides every action.
+#          (A* is only calculated and displayed.)
+# ---------------------------------------------------------
+
+USE_ASTAR_MOVEMENT = True
+
 
 # =========================================================
 # OBSTACLES
@@ -141,12 +156,17 @@ OBSTACLES = {
 
     (7, 8),
     (7, 9),
-    
+
 }
 
 
 # =========================================================
 # GAME STATE
+#
+# Shield (defend) rule used by BOTH main.py and minimax.py:
+#   - DEFEND gives a shield.
+#   - The shield halves the next hit and is then used up.
+#   - The shield is also lost if that unit moves.
 # =========================================================
 
 player_position = (2, 2)
@@ -165,6 +185,8 @@ game_over = False
 winner = None
 
 ai_thinking = False
+
+ai_turn_ready_time = 0
 
 ai_action_text = "Waiting..."
 
@@ -206,6 +228,7 @@ damage_number_position = None
 
 shield_animation = False
 shield_animation_start = 0
+shield_owner = None
 
 MOVE_ANIMATION_TIME = 180
 
@@ -262,6 +285,7 @@ def reset_game():
     global winner
 
     global ai_thinking
+    global ai_turn_ready_time
     global ai_action_text
 
     global battle_log
@@ -269,6 +293,7 @@ def reset_game():
     global attack_animation
     global damage_number
     global shield_animation
+    global shield_owner
 
     player_position = (2, 2)
     ai_position = (5, 9)
@@ -285,6 +310,7 @@ def reset_game():
     winner = None
 
     ai_thinking = False
+    ai_turn_ready_time = 0
 
     ai_action_text = "Waiting..."
 
@@ -293,6 +319,7 @@ def reset_game():
     attack_animation = False
     damage_number = None
     shield_animation = False
+    shield_owner = None
 
     reset_metrics()
 
@@ -702,6 +729,19 @@ def draw_player():
         width=2
     )
 
+    # Shield is active until it absorbs a hit
+    # or the player moves.
+
+    if player_defending:
+
+        pygame.draw.circle(
+            SCREEN,
+            CYAN,
+            center,
+            25,
+            width=2
+        )
+
     draw_center_text(
         "P",
         center,
@@ -735,6 +775,16 @@ def draw_ai():
         width=2
     )
 
+    if ai_defending:
+
+        pygame.draw.circle(
+            SCREEN,
+            CYAN,
+            center,
+            25,
+            width=2
+        )
+
     draw_center_text(
         "AI",
         center,
@@ -766,7 +816,10 @@ def draw_shield():
 
         return
 
-    if player_defending:
+    # The animation follows the unit that
+    # actually pressed / chose DEFEND.
+
+    if shield_owner == "PLAYER":
 
         center = cell_center(
             player_position
@@ -979,16 +1032,19 @@ def start_attack_animation(
 # DEFEND EFFECT
 # =========================================================
 
-def start_shield_animation():
+def start_shield_animation(owner):
 
     global shield_animation
     global shield_animation_start
+    global shield_owner
 
     shield_animation = True
 
     shield_animation_start = (
         pygame.time.get_ticks()
     )
+
+    shield_owner = owner
 
 
 # =========================================================
@@ -1001,6 +1057,7 @@ def move_player(
 ):
 
     global player_position
+    global player_defending
 
     if turn != "PLAYER":
         return
@@ -1038,6 +1095,17 @@ def move_player(
     add_log(
         f"Player moved to {player_position}."
     )
+
+    # Moving drops the shield
+    # (same rule as inside minimax.py).
+
+    if player_defending:
+
+        player_defending = False
+
+        add_log(
+            "Player lowered the shield."
+        )
 
     end_player_turn()
 
@@ -1120,7 +1188,9 @@ def player_defend():
 
     player_defending = True
 
-    start_shield_animation()
+    start_shield_animation(
+        "PLAYER"
+    )
 
     add_log(
         "Player is defending."
@@ -1137,6 +1207,7 @@ def end_player_turn():
 
     global turn
     global ai_thinking
+    global ai_turn_ready_time
 
     if game_over:
         return
@@ -1144,6 +1215,16 @@ def end_player_turn():
     turn = "AI"
 
     ai_thinking = True
+
+    # The AI acts after a short delay.
+    # The game loop keeps drawing during this time,
+    # so animations and "AI THINKING..." stay visible.
+
+    ai_turn_ready_time = (
+        pygame.time.get_ticks()
+        +
+        AI_THINK_DELAY
+    )
 
 
 # =========================================================
@@ -1180,6 +1261,21 @@ def calculate_astar():
     global astar_path_cost
     global astar_time
 
+    astar_path = []
+
+    astar_nodes = 0
+    astar_path_cost = 0
+    astar_time = 0.0
+
+    # Already in attack range:
+    # no path is needed.
+
+    if can_attack(
+        ai_position,
+        player_position
+    ):
+        return
+
     # AI needs to reach a cell adjacent
     # to the player, not player's cell.
 
@@ -1192,15 +1288,12 @@ def calculate_astar():
         if position in OBSTACLES:
             continue
 
-        if position == ai_position:
-            continue
-
         possible_goals.append(
             position
         )
 
     best_path = []
-    best_nodes = 0
+    total_nodes = 0
 
     start_time = time.perf_counter()
 
@@ -1224,23 +1317,26 @@ def calculate_astar():
             path_obstacles
         )
 
+        # Count every node A* explored,
+        # so Nodes and Time describe the same work.
+
+        total_nodes += nodes
+
         if path:
 
             if not best_path:
 
                 best_path = path
-                best_nodes = nodes
 
             elif len(path) < len(best_path):
 
                 best_path = path
-                best_nodes = nodes
 
     end_time = time.perf_counter()
 
     astar_path = best_path
 
-    astar_nodes = best_nodes
+    astar_nodes = total_nodes
 
     if best_path:
 
@@ -1255,6 +1351,75 @@ def calculate_astar():
     astar_time = (
         end_time - start_time
     ) * 1000
+
+
+# =========================================================
+# A* NEXT STEP
+# =========================================================
+
+def get_astar_next_step():
+
+    if len(astar_path) < 2:
+        return None
+
+    # Path normally starts at the AI's cell.
+
+    if astar_path[0] == ai_position:
+        return astar_path[1]
+
+    # Safety: in case the path is reversed.
+
+    if astar_path[-1] == ai_position:
+        return astar_path[-2]
+
+    return None
+
+
+# =========================================================
+# HYBRID DECISION (A* + MINIMAX)
+# =========================================================
+
+def apply_astar_guidance(action):
+
+    # Returns: (final_action, used_astar)
+
+    if not USE_ASTAR_MOVEMENT:
+        return action, False
+
+    # In attack range: Minimax decides.
+
+    if can_attack(
+        ai_position,
+        player_position
+    ):
+        return action, False
+
+    next_step = get_astar_next_step()
+
+    if next_step is None:
+        return action, False
+
+    if next_step in OBSTACLES:
+        return action, False
+
+    if next_step == player_position:
+        return action, False
+
+    # Safety rule: if one player hit can kill the AI,
+    # do not walk into the player's attack range.
+    # Keep Minimax's (careful) decision instead.
+
+    if (
+        ai_hp <= PLAYER_DAMAGE
+        and
+        can_attack(next_step, player_position)
+    ):
+        return action, False
+
+    return (
+        ("MOVE", next_step),
+        True
+    )
 
 
 # =========================================================
@@ -1326,7 +1491,9 @@ def execute_ai_action(
 
         ai_defending = True
 
-        start_shield_animation()
+        start_shield_animation(
+            "AI"
+        )
 
         add_log(
             "AI is defending."
@@ -1369,6 +1536,17 @@ def execute_ai_action(
             add_log(
                 f"AI moved to {ai_position}."
             )
+
+            # Moving drops the shield
+            # (same rule as inside minimax.py).
+
+            if ai_defending:
+
+                ai_defending = False
+
+                add_log(
+                    "AI lowered its shield."
+                )
 
 
 # =========================================================
@@ -1424,8 +1602,17 @@ def run_ai_turn():
     minimax_pruned = pruned
     minimax_score = best_score
 
-    ai_action_text = format_ai_action(
+    # -----------------------------------------------------
+    # HYBRID: A* chooses the step when far away
+    # -----------------------------------------------------
+
+    final_action, used_astar = apply_astar_guidance(
         best_action
+    )
+
+    ai_action_text = format_ai_action(
+        final_action,
+        used_astar
     )
 
     # -----------------------------------------------------
@@ -1433,7 +1620,7 @@ def run_ai_turn():
     # -----------------------------------------------------
 
     execute_ai_action(
-        best_action
+        final_action
     )
 
     check_game_over()
@@ -1453,7 +1640,10 @@ def run_ai_turn():
 # FORMAT AI ACTION
 # =========================================================
 
-def format_ai_action(action):
+def format_ai_action(
+    action,
+    used_astar=False
+):
 
     if action == "ATTACK":
 
@@ -1469,9 +1659,15 @@ def format_ai_action(action):
         action[0] == "MOVE"
     ):
 
-        return (
+        text = (
             f"MOVE → {action[1]}"
         )
+
+        if used_astar:
+
+            text += " (A*)"
+
+        return text
 
     return str(action)
 
@@ -1487,8 +1683,6 @@ def check_game_over():
     global ai_thinking
 
     if player_hp <= 0:
-
-        player_hp_value = 0
 
         game_over = True
 
@@ -2082,8 +2276,6 @@ def handle_keydown(event):
 
 def main():
 
-    global ai_thinking
-
     reset_game()
 
     running = True
@@ -2108,6 +2300,10 @@ def main():
 
         # -------------------------------------------------
         # AI TURN
+        #
+        # No blocking delay here. The AI simply waits
+        # until ai_turn_ready_time while the screen
+        # keeps updating.
         # -------------------------------------------------
 
         if (
@@ -2116,11 +2312,9 @@ def main():
             ai_thinking
             and
             not game_over
+            and
+            pygame.time.get_ticks() >= ai_turn_ready_time
         ):
-
-            pygame.time.delay(
-                AI_THINK_DELAY
-            )
 
             run_ai_turn()
 

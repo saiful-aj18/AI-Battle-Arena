@@ -385,6 +385,8 @@ def apply_ai_action(
     # =====================================================
 
     if action == "ATTACK":
+        
+        new_state["ai_defending"] = False 
 
         if can_attack(
             state["ai_position"],
@@ -488,6 +490,8 @@ def apply_player_action(
     # =====================================================
 
     if action == "ATTACK":
+        
+        new_state["player_defending"] = False
 
         if can_attack(
             state["player_position"],

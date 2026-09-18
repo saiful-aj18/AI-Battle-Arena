@@ -2,7 +2,7 @@ import heapq
 
 
 # =========================================================
-# MANHATTAN DISTANCE
+# MANHATTAN HEURISTIC
 # =========================================================
 
 def heuristic(current, goal):
@@ -12,8 +12,7 @@ def heuristic(current, goal):
 
     return (
         abs(current_row - goal_row)
-        +
-        abs(current_col - goal_col)
+        + abs(current_col - goal_col)
     )
 
 
@@ -31,10 +30,10 @@ def get_neighbors(
     row, col = position
 
     directions = [
-        (-1, 0),  # UP
-        (1, 0),   # DOWN
-        (0, -1),  # LEFT
-        (0, 1),   # RIGHT
+        (-1, 0),   # UP
+        (1, 0),    # DOWN
+        (0, -1),   # LEFT
+        (0, 1),    # RIGHT
     ]
 
     neighbors = []
@@ -44,7 +43,7 @@ def get_neighbors(
         new_row = row + row_change
         new_col = col + col_change
 
-        # Check grid boundary
+        # Outside grid
 
         if new_row < 0 or new_row >= rows:
             continue
@@ -57,7 +56,7 @@ def get_neighbors(
             new_col
         )
 
-        # Check obstacle
+        # Obstacle
 
         if new_position in obstacles:
             continue
@@ -117,7 +116,7 @@ def a_star(
         )
     )
 
-    # Parent of every node
+    # Parent information
 
     came_from = {}
 
@@ -139,8 +138,6 @@ def a_star(
     nodes_explored = 0
 
     while open_set:
-
-        # Get lowest f-score node
 
         current_f, current = heapq.heappop(
             open_set
@@ -170,14 +167,12 @@ def a_star(
 
         for neighbor in neighbors:
 
-            # Every movement costs 1
-
             tentative_g = (
                 g_score[current]
                 + 1
             )
 
-            # If this is a better path
+            # Better path found
 
             if (
                 neighbor not in g_score
@@ -205,6 +200,6 @@ def a_star(
                     )
                 )
 
-    # No path found
+    # No path
 
     return [], nodes_explored

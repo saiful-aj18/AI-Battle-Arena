@@ -114,7 +114,37 @@ ATTACK_RANGE = 1
 
 AI_DEPTH = 3
 
-AI_THINK_DELAY = 700
+AI_THINK_DELAY = 1200
+
+# =========================================================
+# LEVEL PROGRESSION
+# =========================================================
+# Five combat stages. Level 5 is the final boss and ends the run
+# when defeated. The AI gets stronger through HP, damage and search
+# depth, while the player gets a fresh 100 HP at each new stage.
+LEVEL_CONFIG = {
+    1: {"name": "ROOKIE FIGHTER", "hp": 100, "damage": 15, "depth": 3, "reward": 100, "survival_threshold": 25},
+    2: {"name": "VANGUARD FIGHTER", "hp": 120, "damage": 16, "depth": 3, "reward": 150, "survival_threshold": 30},
+    3: {"name": "ELITE FIGHTER", "hp": 145, "damage": 18, "depth": 3, "reward": 200, "survival_threshold": 32},
+    4: {"name": "COMMANDER", "hp": 170, "damage": 20, "depth": 4, "reward": 250, "survival_threshold": 35},
+    5: {"name": "FINAL BOSS", "hp": 220, "damage": 24, "depth": 4, "reward": 1000, "survival_threshold": 45},
+}
+
+FINAL_LEVEL = 5
+
+# Player gets a reasonable response window each turn.
+PLAYER_RESPONSE_TIME = 10000
+
+# When the AI becomes critically weak, it tries to disengage
+# instead of standing still and waiting to be killed.
+AI_LOW_HP_THRESHOLD = 25
+
+# Survival mode is temporary. The wounded AI may retreat only a
+# couple of times before it must re-engage. Staying wounded for too
+# long also causes a small HP drain.
+SURVIVAL_MAX_RETREAT_TURNS = 2
+SURVIVAL_HP_DRAIN = 5
+SURVIVAL_ATTACK_HEAL = 8
 
 # ---------------------------------------------------------
 # HYBRID AI (A* + MINIMAX)
@@ -173,7 +203,14 @@ player_position = (2, 2)
 ai_position = (5, 9)
 
 player_hp = MAX_HP
-ai_hp = MAX_HP
+ai_max_hp = MAX_HP
+ai_hp = ai_max_hp
+
+# Progression
+level = 1
+score = 0
+ai_name = LEVEL_CONFIG[level]["name"]
+final_victory = False
 
 player_defending = False
 ai_defending = False
@@ -187,8 +224,13 @@ winner = None
 ai_thinking = False
 
 ai_turn_ready_time = 0
+player_turn_started_at = 0
 
 ai_action_text = "Waiting..."
+
+# Survival-mode tracking
+ai_survival_mode = False
+ai_survival_turns = 0
 
 battle_log = []
 
@@ -275,7 +317,13 @@ def reset_game():
     global ai_position
 
     global player_hp
+    global ai_max_hp
     global ai_hp
+
+    global level
+    global score
+    global ai_name
+    global final_victory
 
     global player_defending
     global ai_defending
@@ -286,7 +334,10 @@ def reset_game():
 
     global ai_thinking
     global ai_turn_ready_time
+    global player_turn_started_at
     global ai_action_text
+    global ai_survival_mode
+    global ai_survival_turns
 
     global battle_log
 
@@ -298,8 +349,14 @@ def reset_game():
     player_position = (2, 2)
     ai_position = (5, 9)
 
+    level = 1
+    score = 0
+    ai_name = LEVEL_CONFIG[level]["name"]
+    final_victory = False
+
     player_hp = MAX_HP
-    ai_hp = MAX_HP
+    ai_max_hp = MAX_HP
+    ai_hp = ai_max_hp
 
     player_defending = False
     ai_defending = False
@@ -311,8 +368,12 @@ def reset_game():
 
     ai_thinking = False
     ai_turn_ready_time = 0
+    player_turn_started_at = pygame.time.get_ticks()
 
     ai_action_text = "Waiting..."
+
+    ai_survival_mode = False
+    ai_survival_turns = 0
 
     battle_log = []
 
@@ -323,8 +384,8 @@ def reset_game():
 
     reset_metrics()
 
-    add_log("Battle started.")
-    add_log("Your turn. Choose an action.")
+    add_log("Battle started — Level 1.")
+    add_log("Your turn. You have 10 seconds to respond.")
 
 
 # =========================================================
@@ -708,45 +769,155 @@ def draw_attack_range():
 # DRAW PLAYER
 # =========================================================
 
-def draw_player():
+def draw_fighter(position, team, defending=False):
+    """Draw a compact top-down fighter instead of a simple circle."""
+    center_x, center_y = cell_center(position)
 
-    center = cell_center(
-        player_position
-    )
+    if team == "PLAYER":
+        armor = BLUE
+        accent = CYAN
+        facing = 1
+    else:
+        armor = RED
+        accent = ORANGE
+        facing = -1
 
-    pygame.draw.circle(
+    # Soft shadow
+    pygame.draw.ellipse(
         SCREEN,
-        BLUE,
-        center,
-        19
+        (5, 8, 15),
+        pygame.Rect(
+            center_x - 20,
+            center_y + 13,
+            40,
+            9
+        )
     )
 
-    pygame.draw.circle(
+    # Legs / boots
+    pygame.draw.rect(
+        SCREEN,
+        (55, 62, 75),
+        pygame.Rect(center_x - 12, center_y + 8, 8, 13),
+        border_radius=3
+    )
+    pygame.draw.rect(
+        SCREEN,
+        (55, 62, 75),
+        pygame.Rect(center_x + 4, center_y + 8, 8, 13),
+        border_radius=3
+    )
+
+    # Body armor
+    body = pygame.Rect(
+        center_x - 14,
+        center_y - 4,
+        28,
+        25
+    )
+    pygame.draw.rect(
+        SCREEN,
+        armor,
+        body,
+        border_radius=7
+    )
+    pygame.draw.rect(
         SCREEN,
         WHITE,
-        center,
-        19,
-        width=2
+        body,
+        width=1,
+        border_radius=7
     )
 
-    # Shield is active until it absorbs a hit
-    # or the player moves.
+    # Chest plate highlight
+    pygame.draw.line(
+        SCREEN,
+        accent,
+        (center_x, center_y - 1),
+        (center_x, center_y + 16),
+        width=3
+    )
 
-    if player_defending:
+    # Helmet
+    pygame.draw.circle(
+        SCREEN,
+        (205, 212, 222),
+        (center_x, center_y - 12),
+        11
+    )
+    pygame.draw.circle(
+        SCREEN,
+        armor,
+        (center_x, center_y - 12),
+        9
+    )
 
+    # Visor
+    pygame.draw.rect(
+        SCREEN,
+        (25, 30, 40),
+        pygame.Rect(center_x - 8, center_y - 14, 16, 5),
+        border_radius=2
+    )
+
+    # Arms
+    pygame.draw.line(
+        SCREEN,
+        armor,
+        (center_x - 12, center_y + 2),
+        (center_x - 20, center_y + 9),
+        width=6
+    )
+    pygame.draw.line(
+        SCREEN,
+        armor,
+        (center_x + 12, center_y + 2),
+        (center_x + 20, center_y + 9),
+        width=6
+    )
+
+    # Weapon
+    sword_x = center_x + (24 * facing)
+    pygame.draw.line(
+        SCREEN,
+        (210, 220, 230),
+        (center_x + (13 * facing), center_y + 5),
+        (sword_x, center_y - 8),
+        width=4
+    )
+    pygame.draw.line(
+        SCREEN,
+        YELLOW,
+        (center_x + (10 * facing), center_y + 3),
+        (center_x + (15 * facing), center_y + 8),
+        width=3
+    )
+
+    # Team badge
+    badge = "P" if team == "PLAYER" else "A"
+    draw_center_text(
+        badge,
+        (center_x, center_y - 12),
+        FONT_SMALL,
+        WHITE
+    )
+
+    # Active shield
+    if defending:
         pygame.draw.circle(
             SCREEN,
             CYAN,
-            center,
-            25,
+            (center_x, center_y),
+            30,
             width=2
         )
 
-    draw_center_text(
-        "P",
-        center,
-        FONT_MEDIUM,
-        WHITE
+
+def draw_player():
+    draw_fighter(
+        player_position,
+        "PLAYER",
+        player_defending
     )
 
 
@@ -755,41 +926,10 @@ def draw_player():
 # =========================================================
 
 def draw_ai():
-
-    center = cell_center(
-        ai_position
-    )
-
-    pygame.draw.circle(
-        SCREEN,
-        RED,
-        center,
-        19
-    )
-
-    pygame.draw.circle(
-        SCREEN,
-        WHITE,
-        center,
-        19,
-        width=2
-    )
-
-    if ai_defending:
-
-        pygame.draw.circle(
-            SCREEN,
-            CYAN,
-            center,
-            25,
-            width=2
-        )
-
-    draw_center_text(
+    draw_fighter(
+        ai_position,
         "AI",
-        center,
-        FONT_SMALL,
-        WHITE
+        ai_defending
     )
 
 
@@ -1118,6 +1258,8 @@ def player_attack():
 
     global ai_hp
     global ai_defending
+    global score
+    global level
 
     if turn != "PLAYER":
         return
@@ -1155,6 +1297,11 @@ def player_attack():
         ai_hp - damage
     )
 
+    level_before_attack = level
+
+    # Reward accurate combat actions.
+    score += damage
+
     start_attack_animation(
         player_position,
         ai_position,
@@ -1167,7 +1314,7 @@ def player_attack():
 
     check_game_over()
 
-    if not game_over:
+    if not game_over and level == level_before_attack:
 
         end_player_turn()
 
@@ -1206,8 +1353,11 @@ def player_defend():
 def end_player_turn():
 
     global turn
+    global game_over
+    global winner
     global ai_thinking
     global ai_turn_ready_time
+    global player_turn_started_at
 
     if game_over:
         return
@@ -1230,6 +1380,22 @@ def end_player_turn():
 # =========================================================
 # BUILD AI STATE
 # =========================================================
+
+def get_level_config():
+    return LEVEL_CONFIG[level]
+
+
+def get_ai_damage():
+    return get_level_config()["damage"]
+
+
+def get_ai_survival_threshold():
+    return get_level_config()["survival_threshold"]
+
+
+def get_ai_search_depth():
+    return get_level_config()["depth"]
+
 
 def build_ai_state():
 
@@ -1379,6 +1545,130 @@ def get_astar_next_step():
 # HYBRID DECISION (A* + MINIMAX)
 # =========================================================
 
+def get_safe_retreat_step():
+    """
+    Find a short, tactical retreat instead of sending the AI to the
+    opposite side of the map. The AI tries to keep roughly 2-3 cells
+    away from the player so the human can still chase and defeat it.
+    """
+    path_obstacles = set(OBSTACLES)
+    path_obstacles.add(player_position)
+
+    candidates = []
+
+    for row in range(ROWS):
+        for col in range(COLS):
+            goal = (row, col)
+
+            if goal in path_obstacles or goal == ai_position:
+                continue
+
+            distance = get_distance(goal, player_position)
+
+            # Tactical retreat zone: far enough to avoid the next melee
+            # hit, but not so far that the AI becomes impossible to catch.
+            if distance < ATTACK_RANGE + 1 or distance > 3:
+                continue
+
+            path, nodes = a_star(
+                ai_position,
+                goal,
+                ROWS,
+                COLS,
+                path_obstacles
+            )
+
+            if len(path) >= 2:
+                candidates.append((
+                    abs(distance - 2.5),
+                    len(path) - 1,
+                    path
+                ))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda item: (item[0], item[1]))
+    return candidates[0][2][1]
+
+
+def get_survival_action():
+    """
+    Decide what a critically wounded AI should do.
+
+    First two survival turns: short retreat.
+    After that: re-engage instead of endlessly running away.
+    """
+    if ai_hp > get_ai_survival_threshold():
+        return None, False
+
+    # If the AI has been hiding long enough, it must fight back.
+    if ai_survival_turns > SURVIVAL_MAX_RETREAT_TURNS:
+        if can_attack(ai_position, player_position):
+            return "ATTACK", True
+
+        # Not close enough to attack: take an A* step toward the player.
+        path_obstacles = set(OBSTACLES)
+        path_obstacles.add(player_position)
+
+        path, _ = a_star(
+            ai_position,
+            player_position,
+            ROWS,
+            COLS,
+            path_obstacles
+        )
+
+        if len(path) >= 2:
+            next_step = path[1]
+            if next_step not in OBSTACLES and next_step != player_position:
+                return ("MOVE", next_step), True
+
+    retreat_step = get_safe_retreat_step()
+
+    if retreat_step is not None and ai_survival_turns <= SURVIVAL_MAX_RETREAT_TURNS:
+        return ("MOVE", retreat_step), True
+
+    # If there is no safe retreat, let Minimax decide.
+    return None, False
+
+
+def update_survival_state():
+    """Update low-HP survival mode and apply prolonged-survival HP drain."""
+    global ai_survival_mode
+    global ai_survival_turns
+    global ai_hp
+
+    if ai_hp <= get_ai_survival_threshold() and ai_hp > 0:
+        if not ai_survival_mode:
+            ai_survival_mode = True
+            ai_survival_turns = 0
+            add_log("AI entered SURVIVAL MODE — it is critically wounded.")
+
+        ai_survival_turns += 1
+
+        if ai_survival_turns > SURVIVAL_MAX_RETREAT_TURNS:
+            ai_hp = max(0, ai_hp - SURVIVAL_HP_DRAIN)
+            add_log(
+                f"AI is losing {SURVIVAL_HP_DRAIN} HP from prolonged survival mode."
+            )
+
+    elif ai_hp > get_ai_survival_threshold() and ai_survival_mode:
+        ai_survival_mode = False
+        ai_survival_turns = 0
+        add_log("AI recovered enough HP and left survival mode.")
+
+
+def apply_low_hp_retreat(action):
+    """Use temporary survival behavior without making the AI permanently flee."""
+    survival_action, used_survival = get_survival_action()
+
+    if survival_action is not None:
+        return survival_action, used_survival
+
+    return action, False
+
+
 def apply_astar_guidance(action):
 
     # Returns: (final_action, used_astar)
@@ -1432,8 +1722,11 @@ def execute_ai_action(
 
     global ai_position
     global player_hp
+    global ai_hp
     global player_defending
     global ai_defending
+    global ai_survival_mode
+    global ai_survival_turns
 
     global ai_action_text
 
@@ -1454,7 +1747,7 @@ def execute_ai_action(
 
             return
 
-        damage = AI_DAMAGE
+        damage = get_ai_damage()
 
         if player_defending:
 
@@ -1482,6 +1775,26 @@ def execute_ai_action(
         add_log(
             f"AI attacked Player for {damage} damage."
         )
+
+        # Successful attacks give the wounded fighter a small recovery.
+        # This is deliberately limited so the AI cannot heal indefinitely.
+        if ai_survival_mode:
+            old_hp = ai_hp
+            ai_hp = min(
+                ai_max_hp,
+                ai_hp + (SURVIVAL_ATTACK_HEAL + max(0, level - 4) * 2)
+            )
+            healed = ai_hp - old_hp
+
+            if healed > 0:
+                add_log(
+                    f"AI recovered +{healed} HP from a successful counterattack."
+                )
+
+            if ai_hp > get_ai_survival_threshold():
+                ai_survival_mode = False
+                ai_survival_turns = 0
+                add_log("AI left survival mode and returned to normal combat.")
 
     # -----------------------------------------------------
     # DEFEND
@@ -1559,6 +1872,9 @@ def run_ai_turn():
     global ai_thinking
 
     global ai_action_text
+    global player_turn_started_at
+    global ai_survival_mode
+    global ai_survival_turns
 
     global minimax_nodes
     global minimax_pruned
@@ -1566,6 +1882,17 @@ def run_ai_turn():
     global minimax_score
 
     if game_over:
+        return
+
+    # -----------------------------------------------------
+    # SURVIVAL MODE UPDATE
+    # -----------------------------------------------------
+
+    update_survival_state()
+
+    # Prolonged survival mode can drain the last HP.
+    if ai_hp <= 0:
+        check_game_over()
         return
 
     # -----------------------------------------------------
@@ -1589,7 +1916,7 @@ def run_ai_turn():
         pruned
     ) = get_best_action(
         state,
-        depth=AI_DEPTH
+        depth=get_ai_search_depth()
     )
 
     end_time = time.perf_counter()
@@ -1603,16 +1930,28 @@ def run_ai_turn():
     minimax_score = best_score
 
     # -----------------------------------------------------
-    # HYBRID: A* chooses the step when far away
+    # CRITICAL HP: retreat before the player can finish AI
     # -----------------------------------------------------
 
-    final_action, used_astar = apply_astar_guidance(
+    final_action, used_retreat = apply_low_hp_retreat(
         best_action
     )
 
+    # -----------------------------------------------------
+    # HYBRID: A* chooses the approach step when far away
+    # -----------------------------------------------------
+
+    if used_retreat:
+        used_astar = False
+    else:
+        final_action, used_astar = apply_astar_guidance(
+            best_action
+        )
+
     ai_action_text = format_ai_action(
         final_action,
-        used_astar
+        used_astar,
+        used_retreat
     )
 
     # -----------------------------------------------------
@@ -1630,9 +1969,10 @@ def run_ai_turn():
         turn = "PLAYER"
 
         ai_thinking = False
+        player_turn_started_at = pygame.time.get_ticks()
 
         add_log(
-            "Your turn."
+            f"Your turn. Response window: {PLAYER_RESPONSE_TIME // 1000}s."
         )
 
 
@@ -1642,7 +1982,8 @@ def run_ai_turn():
 
 def format_ai_action(
     action,
-    used_astar=False
+    used_astar=False,
+    used_retreat=False
 ):
 
     if action == "ATTACK":
@@ -1663,7 +2004,11 @@ def format_ai_action(
             f"MOVE → {action[1]}"
         )
 
-        if used_astar:
+        if used_retreat:
+
+            text += " (RETREAT)"
+
+        elif used_astar:
 
             text += " (A*)"
 
@@ -1676,39 +2021,124 @@ def format_ai_action(
 # GAME OVER
 # =========================================================
 
+def start_next_level():
+    """Advance from one fighter to the next stage without resetting score."""
+    global level
+    global ai_max_hp
+    global ai_hp
+    global player_hp
+    global player_position
+    global ai_position
+    global player_defending
+    global ai_defending
+    global turn
+    global game_over
+    global winner
+    global ai_thinking
+    global ai_turn_ready_time
+    global player_turn_started_at
+    global ai_action_text
+    global attack_animation
+    global damage_number
+    global shield_animation
+    global shield_owner
+    global ai_survival_mode
+    global ai_survival_turns
+    global ai_name
+
+    level += 1
+    config = LEVEL_CONFIG[level]
+    ai_name = config["name"]
+
+    game_over = False
+    winner = None
+    ai_max_hp = config["hp"]
+    ai_hp = ai_max_hp
+
+    # Fresh player life for each stage keeps progression fair.
+    player_hp = MAX_HP
+
+    player_position = (2, 2)
+    ai_position = (5, 9)
+
+    player_defending = False
+    ai_defending = False
+
+    turn = "PLAYER"
+    ai_thinking = False
+    ai_turn_ready_time = 0
+    player_turn_started_at = pygame.time.get_ticks()
+    ai_action_text = "New opponent"
+
+    ai_survival_mode = False
+    ai_survival_turns = 0
+
+    attack_animation = False
+    damage_number = None
+    shield_animation = False
+    shield_owner = None
+
+    add_log(
+        f"LEVEL {level} — {ai_name} enters the arena!"
+    )
+    add_log(
+        f"Enemy HP: {ai_max_hp}  |  Damage: {config['damage']}  |  Search Depth: {config['depth']}"
+    )
+    add_log(
+        "Your turn. Defeat this fighter to advance."
+    )
+
+
 def check_game_over():
 
     global game_over
     global winner
     global ai_thinking
+    global score
+    global final_victory
 
     if player_hp <= 0:
 
         game_over = True
-
         winner = "AI"
-
+        final_victory = False
         ai_thinking = False
 
         add_log(
-            "AI wins the battle."
+            f"{ai_name} wins. Final score: {score}."
         )
 
         return
 
     if ai_hp <= 0:
 
-        game_over = True
+        reward = LEVEL_CONFIG[level]["reward"]
+        score += reward
 
-        winner = "PLAYER"
+        if level >= FINAL_LEVEL:
+            # Final boss defeated: this is the real end of the game.
+            game_over = True
+            winner = "PLAYER"
+            final_victory = True
+            ai_thinking = False
 
-        ai_thinking = False
+            add_log(
+                f"FINAL BOSS DEFEATED! +{reward} score."
+            )
+            add_log(
+                f"🏆 ARENA CLEARED! Final score: {score}."
+            )
+
+            return
 
         add_log(
-            "Player wins the battle."
+            f"{ai_name} DEFEATED! +{reward} score."
+        )
+        add_log(
+            f"Preparing Level {level + 1}..."
         )
 
-        return
+        start_next_level()
 
 
 # =========================================================
@@ -1771,7 +2201,7 @@ def draw_ai_brain_panel():
     )
 
     draw_text(
-        str(AI_DEPTH),
+        str(get_ai_search_depth()),
         (rect.x + 180, y),
         FONT_NORMAL,
         WHITE
@@ -1791,6 +2221,22 @@ def draw_ai_brain_panel():
         (rect.x + 180, y),
         FONT_NORMAL,
         YELLOW
+    )
+
+    y += 28
+
+    survival_text = (
+        f"SURVIVAL {ai_survival_turns}/{SURVIVAL_MAX_RETREAT_TURNS}"
+        if ai_survival_mode
+        else "NORMAL COMBAT"
+    )
+    survival_color = ORANGE if ai_survival_mode else GRAY
+
+    draw_text(
+        survival_text,
+        (rect.x + 180, y),
+        FONT_SMALL,
+        survival_color
     )
 
     y += 35
@@ -1918,7 +2364,7 @@ def draw_battle_log():
 def draw_top_bar():
 
     draw_text(
-        "AI BATTLE ARENA",
+        "AI BATTLE ARENA  •  FIGHTER MODE",
         (45, 25),
         FONT_TITLE,
         WHITE
@@ -1929,6 +2375,15 @@ def draw_top_bar():
         (48, 67),
         FONT_SMALL,
         GRAY
+    )
+
+    stage_text = f"LEVEL {level}/5  •  {ai_name}"
+    stage_color = YELLOW if level == FINAL_LEVEL else CYAN
+    draw_text(
+        stage_text,
+        (300, 67),
+        FONT_SMALL,
+        stage_color
     )
 
     # Turn indicator
@@ -1980,14 +2435,12 @@ def draw_status_panel():
         75
     )
 
-    draw_panel(
-        rect
-    )
+    draw_panel(rect)
 
     draw_hp_bar(
         65,
         640,
-        250,
+        210,
         14,
         player_hp,
         MAX_HP,
@@ -1996,23 +2449,44 @@ def draw_status_panel():
     )
 
     draw_hp_bar(
-        360,
+        300,
         640,
-        250,
+        210,
         14,
         ai_hp,
-        MAX_HP,
-        "AI",
+        ai_max_hp,
+        f"{ai_name} • LV {level}",
         RED
     )
 
     draw_text(
-        "WASD / Arrow Keys",
+        f"SCORE  {score}",
+        (535, 625),
+        FONT_MEDIUM,
+        YELLOW
+    )
+
+    # Response timer
+    if turn == "PLAYER" and not game_over:
+        elapsed = pygame.time.get_ticks() - player_turn_started_at
+        remaining = max(
+            0,
+            (PLAYER_RESPONSE_TIME - elapsed) / 1000
+        )
+        timer_color = GREEN if remaining > 3 else ORANGE
+        draw_text(
+            f"TIME  {remaining:04.1f}s",
+            (535, 650),
+            FONT_SMALL,
+            timer_color
+        )
+
+    draw_text(
+        "WASD / Arrows",
         (665, 615),
         FONT_SMALL,
         GRAY
     )
-
     draw_text(
         "Move",
         (665, 635),
@@ -2022,42 +2496,39 @@ def draw_status_panel():
 
     draw_text(
         "SPACE",
-        (770, 615),
+        (765, 615),
         FONT_SMALL,
         GRAY
     )
-
     draw_text(
         "Attack",
-        (770, 635),
+        (765, 635),
         FONT_NORMAL,
         WHITE
     )
 
     draw_text(
         "F",
-        (870, 615),
+        (855, 615),
         FONT_SMALL,
         GRAY
     )
-
     draw_text(
         "Defend",
-        (870, 635),
+        (855, 635),
         FONT_NORMAL,
         WHITE
     )
 
     draw_text(
         "R",
-        (970, 615),
+        (930, 615),
         FONT_SMALL,
         GRAY
     )
-
     draw_text(
         "Restart",
-        (970, 635),
+        (930, 635),
         FONT_NORMAL,
         WHITE
     )
@@ -2089,36 +2560,53 @@ def draw_game_over():
     center_x = WIDTH // 2
     center_y = HEIGHT // 2
 
-    if winner == "PLAYER":
-
-        title = "YOU WIN!"
-
-        title_color = GREEN
-
+    if final_victory:
+        title = "🏆 ARENA CLEARED!"
+        title_color = YELLOW
+        subtitle = "FINAL BOSS DEFEATED — YOU ARE THE CHAMPION"
     else:
-
-        title = "AI WINS"
-
+        title = "RUN OVER"
         title_color = RED
+        subtitle = f"Defeated by {ai_name}"
 
     draw_center_text(
         title,
         (
             center_x,
-            center_y - 45
+            center_y - 65
         ),
         FONT_TITLE,
         title_color
     )
 
     draw_center_text(
-        "Press R to restart",
+        subtitle,
+        (
+            center_x,
+            center_y - 20
+        ),
+        FONT_NORMAL,
+        WHITE
+    )
+
+    draw_center_text(
+        f"Final Score: {score}  •  Level {level}/5",
         (
             center_x,
             center_y + 15
         ),
+        FONT_MEDIUM,
+        YELLOW if final_victory else WHITE
+    )
+
+    draw_center_text(
+        "Press R to play again",
+        (
+            center_x,
+            center_y + 55
+        ),
         FONT_NORMAL,
-        WHITE
+        GRAY
     )
 
 
@@ -2270,6 +2758,18 @@ def handle_keydown(event):
         player_defend()
 
 
+def check_player_response_timeout():
+    """Auto-defend if the player takes too long to choose an action."""
+    if game_over or turn != "PLAYER" or ai_thinking:
+        return
+
+    elapsed = pygame.time.get_ticks() - player_turn_started_at
+
+    if elapsed >= PLAYER_RESPONSE_TIME:
+        add_log("Response time expired — Player auto-defends.")
+        player_defend()
+
+
 # =========================================================
 # MAIN LOOP
 # =========================================================
@@ -2297,6 +2797,12 @@ def main():
                 handle_keydown(
                     event
                 )
+
+        # -------------------------------------------------
+        # PLAYER RESPONSE TIMER
+        # -------------------------------------------------
+
+        check_player_response_timeout()
 
         # -------------------------------------------------
         # AI TURN
